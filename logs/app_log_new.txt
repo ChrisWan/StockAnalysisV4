@@ -1,0 +1,3 @@
+  File "c:\Users\WRSWAC\Desktop\Data Science\Visual Studio\Stock Analysis\app.py", line 541
+    return jsonify({'chart': chart_img})
+IndentationError: unexpected indent

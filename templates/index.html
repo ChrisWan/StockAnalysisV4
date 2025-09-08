@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Portfolio Analysis Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .dashboard-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            margin: 20px;
+            padding: 30px;
+        }        .stock-selector {
+            background: linear-gradient(45deg, #2196F3, #21CBF3);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .stock-selector option {
+            background: white;
+            color: #333;
+            padding: 10px;
+            font-weight: normal;
+        }
+        .stock-selector option:hover {
+            background: #f0f8ff;
+        }
+        .metric-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 10px 0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+        .recommendation-badge {
+            font-size: 18px;
+            font-weight: bold;
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: inline-block;
+            margin: 10px 0;
+        }
+        .buy { background: #4CAF50; color: white; }
+        .sell { background: #f44336; color: white; }
+        .hold { background: #ff9800; color: white; }
+        .strong-buy { background: #2E7D32; color: white; }
+        .strong-sell { background: #D32F2F; color: white; }
+        .score-excellent { color: #4CAF50; font-weight: bold; }
+        .score-good { color: #8BC34A; font-weight: bold; }
+        .score-average { color: #FF9800; font-weight: bold; }
+        .score-below-average { color: #FF5722; font-weight: bold; }
+        .score-poor { color: #F44336; font-weight: bold; }
+        .loading {
+            text-align: center;
+            padding: 50px;
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .metric-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .metric-label {
+            font-weight: 600;
+            color: #555;
+        }
+        .metric-value {
+            font-weight: bold;
+            color: #333;
+        }        .header-title {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .portfolio-management {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .btn-success, .btn-danger {
+            border-radius: 0 10px 10px 0;
+        }        .form-control, .form-select {
+            border-radius: 10px 0 0 10px;
+        }
+        .btn-outline-primary, .btn-outline-danger {
+            border-radius: 25px;
+            padding: 10px 25px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        .btn-outline-primary:hover, .btn-outline-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        #portfolioManagement {
+            animation: slideDown 0.3s ease-out;
+        }
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="dashboard-container">
+            <h1 class="header-title">
+                <i class="fas fa-chart-line"></i> Stock Portfolio Analysis Dashboard
+            </h1>
+            
+            <!-- Stock Selector -->
+            <div class="row mb-4">
+                <div class="col-md-6 offset-md-3">
+                    <label for="stockSelect" class="form-label h5">
+                        <i class="fas fa-search"></i> Select Stock from Portfolio:
+                    </label>                    <select class="form-select stock-selector" id="stockSelect">
+                        <option value="">Choose a stock...</option>
+                        {% for stock in stocks %}
+                        <option value="{{ stock.symbol }}">{{ stock.symbol }} - {{ stock.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>            </div>
+
+            <!-- Portfolio Management Toggle -->
+            <div class="row mb-4">
+                <div class="col-md-12 text-center">
+                    <button class="btn btn-outline-primary" id="togglePortfolioBtn" onclick="togglePortfolioManagement()">
+                        <i class="fas fa-cog"></i> Manage Portfolio
+                    </button>
+                </div>
+            </div>
+
+            <!-- Portfolio Management Section (Hidden by default) -->
+            <div class="row mb-4" id="portfolioManagement" style="display: none;">
+                <div class="col-md-6">
+                    <div class="metric-card">
+                        <h5><i class="fas fa-plus"></i> Add Stock to Portfolio</h5>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="newStock" placeholder="Enter stock symbol (e.g., TSLA)" style="text-transform: uppercase;">
+                            <button class="btn btn-success" id="addStockBtn" onclick="addStock()">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
+                        </div>
+                        <small class="text-muted">Enter a valid stock ticker symbol</small>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="metric-card">
+                        <h5><i class="fas fa-trash"></i> Remove Stock from Portfolio</h5>
+                        <div class="input-group">
+                            <select class="form-select" id="removeStock">
+                                <option value="">Select stock to remove...</option>
+                                {% for stock in stocks %}
+                                <option value="{{ stock.symbol }}">{{ stock.symbol }} - {{ stock.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button class="btn btn-danger" id="removeStockBtn" onclick="removeStock()">
+                                <i class="fas fa-trash"></i> Remove
+                            </button>
+                        </div>
+                        <small class="text-muted">Select a stock to remove from your portfolio</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div id="loadingSpinner" class="loading" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3">Fetching stock data...</p>
+            </div>
+
+            <!-- Stock Analysis Container -->
+            <div id="stockAnalysis" style="display: none;">
+                <!-- Stock Header -->
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <h2 id="stockTitle" class="mb-0"></h2>
+                        <p id="stockInfo" class="text-muted"></p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div id="overallRecommendation"></div>
+                        <small id="lastUpdated" class="text-muted"></small>
+                    </div>
+                </div>
+
+                <!-- Fundamental Analysis Section -->
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="metric-card">
+                            <h3><i class="fas fa-calculator"></i> Fundamental Analysis</h3>
+                            
+                            <!-- Key Metrics Grid -->
+                            <div class="metric-grid" id="fundamentalMetrics">
+                                <!-- Metrics will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <h4><i class="fas fa-star"></i> Fundamental Score</h4>
+                            <div id="fundamentalScore"></div>
+                            
+                            <h5 class="mt-4">Category Scores:</h5>
+                            <div id="categoryScores"></div>
+                            
+                            <div class="mt-3">
+                                <strong>Fundamental Recommendation:</strong>
+                                <div id="fundamentalRecommendation"></div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <strong>Technical Recommendation:</strong>
+                                <div id="technicalRecommendation"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Technical Analysis Charts -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="chart-container">
+                            <h3><i class="fas fa-chart-area"></i> Technical Analysis & Momentum Indicators</h3>
+                            <div id="loadingChart" class="loading" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading chart...</span>
+                                </div>
+                                <p class="mt-3">Generating technical analysis charts...</p>
+                            </div>
+                            <div id="chartContainer"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const stockSelect = document.getElementById('stockSelect');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const stockAnalysis = document.getElementById('stockAnalysis');
+            const loadingChart = document.getElementById('loadingChart');
+
+            stockSelect.addEventListener('change', function() {
+                const selectedStock = this.value;
+                if (selectedStock) {
+                    loadStockData(selectedStock);
+                } else {
+                    stockAnalysis.style.display = 'none';
+                }
+            });
+
+            function loadStockData(stock) {
+                // Show loading spinner
+                loadingSpinner.style.display = 'block';
+                stockAnalysis.style.display = 'none';
+
+                // Fetch stock data
+                fetch(`/api/stock/${stock}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        displayStockData(data);
+                        loadChart(stock);
+                        loadingSpinner.style.display = 'none';
+                        stockAnalysis.style.display = 'block';
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        loadingSpinner.style.display = 'none';
+                        alert('Error loading stock data. Please try again.');
+                    });
+            }
+
+            function loadChart(stock) {
+                loadingChart.style.display = 'block';
+                document.getElementById('chartContainer').innerHTML = '';
+
+                fetch(`/api/chart/${stock}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        loadingChart.style.display = 'none';
+                        const img = document.createElement('img');
+                        img.src = `data:image/png;base64,${data.chart}`;
+                        img.style.width = '100%';
+                        img.style.height = 'auto';
+                        document.getElementById('chartContainer').appendChild(img);
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        loadingChart.style.display = 'none';
+                        document.getElementById('chartContainer').innerHTML = '<p class="text-danger">Error loading chart</p>';
+                    });
+            }
+
+            function displayStockData(data) {
+                // Update stock title
+                document.getElementById('stockTitle').textContent = data.symbol;
+                document.getElementById('stockInfo').textContent = 
+                    `${data.fundamental_metrics.sector || 'N/A'} - ${data.fundamental_metrics.industry || 'N/A'}`;
+                document.getElementById('lastUpdated').textContent = `Last updated: ${data.last_updated}`;
+
+                // Update overall recommendation
+                const overallRec = document.getElementById('overallRecommendation');
+                overallRec.innerHTML = `<span class="recommendation-badge ${getRecommendationClass(data.overall_recommendation)}">${data.overall_recommendation}</span>`;
+
+                // Update fundamental metrics
+                const metricsContainer = document.getElementById('fundamentalMetrics');
+                metricsContainer.innerHTML = '';
+
+                const keyMetrics = [
+                    ['Market Cap', 'market_cap'],
+                    ['Current Price', 'current_price'],
+                    ['P/E Ratio', 'pe_ratio'],
+                    ['Forward P/E', 'forward_pe'],
+                    ['Price/Book', 'price_to_book'],
+                    ['Price/Sales', 'price_to_sales'],
+                    ['PEG Ratio', 'peg_ratio'],
+                    ['Profit Margin', 'profit_margin'],
+                    ['Operating Margin', 'operating_margin'],
+                    ['ROE', 'return_on_equity'],
+                    ['ROA', 'return_on_assets'],
+                    ['Revenue Growth', 'revenue_growth'],
+                    ['Earnings Growth', 'earnings_growth'],
+                    ['Debt/Equity', 'debt_to_equity'],
+                    ['Current Ratio', 'current_ratio'],
+                    ['Beta', 'beta'],
+                    ['Dividend Yield', 'dividend_yield'],
+                    ['52W High', '52_week_high'],
+                    ['52W Low', '52_week_low']
+                ];
+
+                keyMetrics.forEach(([label, key]) => {
+                    const metricDiv = document.createElement('div');
+                    metricDiv.className = 'metric-item';
+                    metricDiv.innerHTML = `
+                        <span class="metric-label">${label}:</span>
+                        <span class="metric-value">${data.fundamental_metrics[key] || 'N/A'}</span>
+                    `;
+                    metricsContainer.appendChild(metricDiv);
+                });
+
+                // Update fundamental score
+                const score = data.fundamental_score;
+                document.getElementById('fundamentalScore').innerHTML = `
+                    <h2 class="${getScoreClass(score.ranking)}">${score.total_score.toFixed(1)}/10</h2>
+                    <p class="${getScoreClass(score.ranking)}">${score.ranking}</p>
+                `;
+
+                // Update category scores
+                const categoryContainer = document.getElementById('categoryScores');
+                categoryContainer.innerHTML = '';
+                for (const [category, categoryScore] of Object.entries(score.category_scores)) {
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.className = 'metric-item';
+                    categoryDiv.innerHTML = `
+                        <span class="metric-label">${category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ')}:</span>
+                        <span class="metric-value">${categoryScore.toFixed(1)}/10</span>
+                    `;
+                    categoryContainer.appendChild(categoryDiv);
+                }
+
+                // Update recommendations
+                document.getElementById('fundamentalRecommendation').innerHTML = 
+                    `<span class="recommendation-badge ${getRecommendationClass(score.recommendation)}">${score.recommendation}</span>`;
+                document.getElementById('technicalRecommendation').innerHTML = 
+                    `<span class="recommendation-badge ${getRecommendationClass(data.technical_recommendation)}">${data.technical_recommendation}</span>`;
+            }
+
+            function getRecommendationClass(recommendation) {
+                switch(recommendation) {
+                    case 'STRONG BUY': return 'strong-buy';
+                    case 'BUY': return 'buy';
+                    case 'HOLD': return 'hold';
+                    case 'SELL': return 'sell';
+                    case 'STRONG SELL': return 'strong-sell';
+                    default: return 'hold';
+                }
+            }
+
+            function getScoreClass(ranking) {
+                switch(ranking) {
+                    case 'EXCELLENT': return 'score-excellent';
+                    case 'GOOD': return 'score-good';
+                    case 'AVERAGE': return 'score-average';
+                    case 'BELOW_AVERAGE': return 'score-below-average';
+                    case 'POOR': return 'score-poor';
+                    default: return 'score-average';                }
+            }
+        });        // Portfolio Management Functions
+        window.togglePortfolioManagement = function() {
+            const portfolioSection = document.getElementById('portfolioManagement');
+            const toggleBtn = document.getElementById('togglePortfolioBtn');
+            
+            if (portfolioSection.style.display === 'none') {
+                portfolioSection.style.display = 'flex';
+                toggleBtn.innerHTML = '<i class="fas fa-times"></i> Close Portfolio Management';
+                toggleBtn.className = 'btn btn-outline-danger';
+            } else {
+                portfolioSection.style.display = 'none';
+                toggleBtn.innerHTML = '<i class="fas fa-cog"></i> Manage Portfolio';
+                toggleBtn.className = 'btn btn-outline-primary';
+            }
+        };
+
+        window.reloadPortfolioDropdowns = function() {
+            // Fetch updated portfolio
+            fetch('/api/portfolio')
+                .then(response => response.json())
+                .then(data => {
+                    const stockSelect = document.getElementById('stockSelect');
+                    const removeStock = document.getElementById('removeStock');
+                    
+                    // Clear existing options
+                    stockSelect.innerHTML = '<option value="">Choose a stock...</option>';
+                    removeStock.innerHTML = '<option value="">Select stock to remove...</option>';
+                    
+                    // Add updated portfolio stocks
+                    data.portfolio.forEach(stock => {
+                        const option1 = document.createElement('option');
+                        option1.value = stock.symbol;
+                        option1.textContent = `${stock.symbol} - ${stock.name}`;
+                        stockSelect.appendChild(option1);
+                        
+                        const option2 = document.createElement('option');
+                        option2.value = stock.symbol;
+                        option2.textContent = `${stock.symbol} - ${stock.name}`;
+                        removeStock.appendChild(option2);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error reloading portfolio:', error);
+                });
+        };
+
+        window.addStock = function() {
+            const newStock = document.getElementById('newStock').value.trim().toUpperCase();
+            if (!newStock) {
+                alert('Please enter a stock symbol');
+                return;
+            }
+
+            const addBtn = document.getElementById('addStockBtn');
+            addBtn.disabled = true;
+            addBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';            fetch('/api/portfolio/add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ symbol: newStock })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                } else {
+                    alert(data.message);
+                    reloadPortfolioDropdowns(); // Reload dropdowns instead of entire page
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error adding stock to portfolio');
+            })
+            .finally(() => {
+                addBtn.disabled = false;
+                addBtn.innerHTML = '<i class="fas fa-plus"></i> Add';
+                document.getElementById('newStock').value = '';
+            });
+        };
+
+        window.removeStock = function() {
+            const stockToRemove = document.getElementById('removeStock').value;
+            if (!stockToRemove) {
+                alert('Please select a stock to remove');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to remove ${stockToRemove} from your portfolio?`)) {
+                return;
+            }
+
+            const removeBtn = document.getElementById('removeStockBtn');
+            removeBtn.disabled = true;
+            removeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Removing...';            fetch('/api/portfolio/remove', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ symbol: stockToRemove })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                } else {
+                    alert(data.message);
+                    reloadPortfolioDropdowns(); // Reload dropdowns instead of entire page
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error removing stock from portfolio');
+            })
+            .finally(() => {
+                removeBtn.disabled = false;
+                removeBtn.innerHTML = '<i class="fas fa-trash"></i> Remove';
+                document.getElementById('removeStock').value = '';
+            });
+        };
+
+        // Allow Enter key to add stock
+        document.getElementById('newStock').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addStock();
+            }
+        });
+    </script>
+</body>
+</html>
