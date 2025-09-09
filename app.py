@@ -8,6 +8,9 @@ import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib
+import json
+import os
+from datetime import datetime
 matplotlib.use('Agg')  # Use non-interactive backend for web
 import io
 import base64
@@ -241,213 +244,612 @@ def calculate_technical_indicators(data):
     
     return data
 
-def calculate_fundamental_score(metrics):
-    """Calculate fundamental analysis score"""
-    if not metrics:
-        return {'total_score': 0, 'category_scores': {}, 'ranking': 'POOR', 'recommendation': 'HOLD'}
+def get_sector_representative_stocks():
+    """Get representative stocks for each sector to calculate benchmarks"""
+    return {
+        'Technology': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'NFLX', 'ADBE', 'CRM'],
+        'Healthcare': ['JNJ', 'UNH', 'PFE', 'ABBV', 'TMO', 'ABT', 'MRK', 'DHR', 'BMY', 'LLY'],
+        'Financial Services': ['JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'AXP', 'BLK', 'SCHW', 'USB'],
+        'Consumer Cyclical': ['HD', 'MCD', 'NKE', 'SBUX', 'TGT', 'LOW', 'TJX', 'MAR', 'GM', 'F'],
+        'Consumer Defensive': ['PG', 'KO', 'PEP', 'WMT', 'COST', 'CL', 'KMB', 'GIS', 'K', 'CPB'],
+        'Utilities': ['NEE', 'DUK', 'SO', 'D', 'AEP', 'EXC', 'SRE', 'PEG', 'XEL', 'ED'],
+        'Energy': ['XOM', 'CVX', 'COP', 'EOG', 'SLB', 'PXD', 'KMI', 'OKE', 'WMB', 'VLO'],
+        'Industrials': ['BA', 'HON', 'UPS', 'CAT', 'GE', 'MMM', 'LMT', 'RTX', 'UNP', 'CSX'],
+        'Materials': ['LIN', 'APD', 'SHW', 'FCX', 'NEM', 'DOW', 'DD', 'PPG', 'ECL', 'IFF'],
+        'Real Estate': ['AMT', 'PLD', 'CCI', 'EQIX', 'SPG', 'O', 'WELL', 'DLR', 'PSA', 'EQR'],
+        'Communication Services': ['T', 'VZ', 'CMCSA', 'DIS', 'CHTR', 'TMUS', 'NFLX', 'EA', 'ATVI', 'TTWO']
+    }
+
+def load_sector_benchmarks():
+    """Load sector benchmarks from JSON file"""
+    benchmarks_file = 'sector_benchmarks.json'
     
-    category_scores = {}
-    
-    # Valuation Score
-    valuation_score = 0
-    valuation_count = 0
-    
-    pe = metrics.get('pe_ratio')
-    if pe and pe > 0:
-        if pe < 15:
-            valuation_score += 10
-        elif pe < 25:
-            valuation_score += 7
-        elif pe < 35:
-            valuation_score += 4
+    try:
+        if os.path.exists(benchmarks_file):
+            with open(benchmarks_file, 'r') as f:
+                data = json.load(f)
+                print(f"Loaded sector benchmarks from {benchmarks_file}")
+                return data
         else:
-            valuation_score += 1
-        valuation_count += 1
+            print(f"Benchmarks file {benchmarks_file} not found, using fallback benchmarks")
+            return get_fallback_sector_benchmarks_all()
+    except Exception as e:
+        print(f"Error loading sector benchmarks: {e}")
+        return get_fallback_sector_benchmarks_all()
+
+def save_sector_benchmarks(benchmarks_data):
+    """Save sector benchmarks to JSON file"""
+    benchmarks_file = 'sector_benchmarks.json'
     
-    pb = metrics.get('price_to_book')
-    if pb and pb > 0:
-        if pb < 1.5:
-            valuation_score += 10
-        elif pb < 3:
-            valuation_score += 7
-        elif pb < 5:
-            valuation_score += 4
-        else:
-            valuation_score += 1
-        valuation_count += 1
+    try:
+        # Add metadata
+        benchmarks_data['_metadata'] = {
+            'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'total_sectors': len([k for k in benchmarks_data.keys() if not k.startswith('_')]),
+            'calculation_method': 'yahoo_finance_percentiles',
+            'representative_stocks_per_sector': 10
+        }
+        
+        with open(benchmarks_file, 'w') as f:
+            json.dump(benchmarks_data, f, indent=2)
+        
+        print(f"Sector benchmarks saved to {benchmarks_file}")
+        return True
+    except Exception as e:
+        print(f"Error saving sector benchmarks: {e}")
+        return False
+
+def calculate_all_sector_benchmarks():
+    """Calculate benchmarks for all sectors and save to file"""
+    print("Starting calculation of all sector benchmarks...")
     
-    category_scores['valuation'] = (valuation_score / max(valuation_count, 1)) if valuation_count > 0 else 0
+    representative_stocks = get_sector_representative_stocks()
+    all_benchmarks = {}
     
-    # Profitability Score
-    profitability_score = 0
-    profitability_count = 0
+    for sector, stocks in representative_stocks.items():
+        print(f"\nCalculating benchmarks for {sector} sector...")
+        try:
+            sector_benchmarks = calculate_single_sector_benchmarks(sector, stocks)
+            if sector_benchmarks:
+                all_benchmarks[sector] = sector_benchmarks
+                print(f"✅ {sector}: {len(sector_benchmarks)} benchmarks calculated")
+            else:
+                print(f"❌ {sector}: Failed to calculate benchmarks")
+                all_benchmarks[sector] = get_fallback_sector_benchmarks(sector)
+        except Exception as e:
+            print(f"❌ {sector}: Error - {e}")
+            all_benchmarks[sector] = get_fallback_sector_benchmarks(sector)
     
-    roe = metrics.get('return_on_equity')
-    if roe and roe > 0:
-        if roe > 0.20:
-            profitability_score += 10
-        elif roe > 0.15:
-            profitability_score += 8
-        elif roe > 0.10:
-            profitability_score += 6
-        elif roe > 0.05:
-            profitability_score += 3
-        else:
-            profitability_score += 1
-        profitability_count += 1
+    # Save to file
+    if save_sector_benchmarks(all_benchmarks):
+        print(f"\n🎉 All sector benchmarks calculated and saved!")
+        return all_benchmarks
+    else:
+        print(f"\n❌ Failed to save benchmarks to file")
+        return None
+
+def calculate_single_sector_benchmarks(sector, stocks):
+    """Calculate simplified benchmarks (median only) for a single sector"""
+    metrics_data = []
     
-    profit_margin = metrics.get('profit_margin')
-    if profit_margin and profit_margin > 0:
-        if profit_margin > 0.20:
-            profitability_score += 10
-        elif profit_margin > 0.15:
-            profitability_score += 8
-        elif profit_margin > 0.10:
-            profitability_score += 6
-        elif profit_margin > 0.05:
-            profitability_score += 3
-        else:
-            profitability_score += 1
-        profitability_count += 1
+    print(f"  Fetching data for {len(stocks)} stocks...")
     
-    category_scores['profitability'] = (profitability_score / max(profitability_count, 1)) if profitability_count > 0 else 0
+    # Fetch data for representative stocks
+    for i, symbol in enumerate(stocks, 1):
+        try:
+            print(f"    {i}/{len(stocks)}: {symbol}", end=" ")
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            
+            # Extract key metrics
+            stock_metrics = {
+                'symbol': symbol,
+                'pe_ratio': info.get('trailingPE'),
+                'price_to_book': info.get('priceToBook'),
+                'price_to_sales': info.get('priceToSalesTrailing12Months'),
+                'return_on_equity': info.get('returnOnEquity'),
+                'profit_margin': info.get('profitMargins')
+            }
+            
+            # Only include stocks with valid core data
+            if (stock_metrics['pe_ratio'] and stock_metrics['pe_ratio'] > 0 and
+                stock_metrics['return_on_equity'] and stock_metrics['return_on_equity'] > 0):
+                metrics_data.append(stock_metrics)
+                print("✅")
+            else:
+                print("❌ (insufficient data)")
+                
+        except Exception as e:
+            print(f"❌ (error: {str(e)[:30]})")
+            continue
     
-    # Enhanced Growth Score with weighted components
-    growth_components = {}
+    if len(metrics_data) < 3:
+        print(f"  ❌ Insufficient valid data ({len(metrics_data)} stocks), using fallback")
+        return None
     
-    # Revenue Growth (30% weight) - Enhanced YoY or fallback to basic
-    revenue_growth = metrics.get('revenue_growth_yoy') or metrics.get('revenue_growth')
-    if revenue_growth is not None:
-        if revenue_growth > 0.20:
-            growth_components['revenue'] = 10
-        elif revenue_growth > 0.10:
-            growth_components['revenue'] = 8
-        elif revenue_growth > 0.05:
-            growth_components['revenue'] = 6
-        elif revenue_growth > 0:
-            growth_components['revenue'] = 4
-        else:
-            growth_components['revenue'] = 1
+    print(f"  📊 Calculating medians from {len(metrics_data)} valid stocks...")
     
-    # Earnings Growth (20% weight) - Existing metric
-    earnings_growth = metrics.get('earnings_growth')
-    if earnings_growth is not None:
-        if earnings_growth > 0.20:
-            growth_components['earnings'] = 10
-        elif earnings_growth > 0.10:
-            growth_components['earnings'] = 8
-        elif earnings_growth > 0.05:
-            growth_components['earnings'] = 6
-        elif earnings_growth > 0:
-            growth_components['earnings'] = 4
-        else:
-            growth_components['earnings'] = 1
+    # Calculate ONLY medians for each metric (simplified!)
+    benchmarks = {}
+    metrics_to_calculate = ['pe_ratio', 'price_to_book', 'price_to_sales', 'return_on_equity', 'profit_margin']
     
-    # Operating Cash Flow Growth (15% weight) - NEW
-    ocf_growth = metrics.get('ocf_growth_yoy')
-    if ocf_growth is not None:
-        if ocf_growth > 0.15:
-            growth_components['ocf'] = 10
-        elif ocf_growth > 0.05:
-            growth_components['ocf'] = 8
-        elif ocf_growth > 0:
-            growth_components['ocf'] = 6
-        elif ocf_growth > -0.05:
-            growth_components['ocf'] = 3
-        else:
-            growth_components['ocf'] = 1
+    for metric in metrics_to_calculate:
+        values = [stock[metric] for stock in metrics_data 
+                 if stock[metric] is not None and stock[metric] > 0]
+        
+        if len(values) >= 3:
+            values.sort()
+            n = len(values)
+            
+            # Calculate ONLY the median (50th percentile)
+            median_idx = int(0.50 * n) - 1
+            median_value = values[median_idx]
+            
+            # Store only the median value (simplified!)
+            benchmarks[f'{metric}_median'] = round(median_value, 3)
     
-    # ROE Growth (35% weight) - NEW - Highest weight as requested
-    roe_growth = metrics.get('roe_growth_yoy')
-    if roe_growth is not None:
-        if roe_growth > 0.10:  # >10% ROE improvement
-            growth_components['roe'] = 10
-        elif roe_growth > 0.05:  # 5-10% improvement
-            growth_components['roe'] = 8
-        elif roe_growth > 0:     # Any positive improvement
-            growth_components['roe'] = 6
-        elif roe_growth > -0.05: # Small decline acceptable
-            growth_components['roe'] = 4
-        else:                    # Significant ROE decline
-            growth_components['roe'] = 1
-    
-    # Calculate weighted growth score
-    weights = {
-        'revenue': 0.30,  # 30%
-        'earnings': 0.20, # 20%
-        'ocf': 0.15,      # 15%
-        'roe': 0.35       # 35%
+    # Add metadata
+    benchmarks['_sector_info'] = {
+        'total_stocks_analyzed': len(metrics_data),
+        'representative_stocks': [stock['symbol'] for stock in metrics_data],
+        'calculation_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
     
-    weighted_score = 0
-    total_weight = 0
+    return benchmarks
+
+def get_fallback_sector_benchmarks_all():
+    """Get fallback benchmarks for all sectors"""
+    return {
+        'Technology': get_fallback_sector_benchmarks('Technology'),
+        'Healthcare': get_fallback_sector_benchmarks('Healthcare'),
+        'Financial Services': get_fallback_sector_benchmarks('Financial Services'),
+        'Consumer Cyclical': get_fallback_sector_benchmarks('Consumer Cyclical'),
+        'Consumer Defensive': get_fallback_sector_benchmarks('Consumer Defensive'),
+        'Utilities': get_fallback_sector_benchmarks('Utilities'),
+        'Energy': get_fallback_sector_benchmarks('Energy'),
+        'Industrials': get_fallback_sector_benchmarks('Industrials'),
+        'Materials': get_fallback_sector_benchmarks('Materials'),
+        'Real Estate': get_fallback_sector_benchmarks('Real Estate'),
+        'Communication Services': get_fallback_sector_benchmarks('Communication Services'),
+        '_metadata': {
+            'last_updated': 'fallback',
+            'total_sectors': 11,
+            'calculation_method': 'static_fallback'
+        }
+    }
+
+def get_fallback_sector_benchmarks(sector):
+    """Simplified fallback benchmarks (median only) for a single sector"""
+    fallback_benchmarks = {
+        'Technology': {
+            'pe_ratio_median': 25.0,
+            'price_to_book_median': 4.0,
+            'price_to_sales_median': 6.0,
+            'return_on_equity_median': 0.15,
+            'profit_margin_median': 0.12
+        },
+        'Healthcare': {
+            'pe_ratio_median': 18.0,
+            'price_to_book_median': 3.0,
+            'price_to_sales_median': 4.0,
+            'return_on_equity_median': 0.12,
+            'profit_margin_median': 0.15
+        },
+        'Financial Services': {
+            'pe_ratio_median': 12.0,
+            'price_to_book_median': 1.2,
+            'price_to_sales_median': 2.5,
+            'return_on_equity_median': 0.10,
+            'profit_margin_median': 0.25
+        },
+        'Utilities': {
+            'pe_ratio_median': 15.0,
+            'price_to_book_median': 1.5,
+            'price_to_sales_median': 2.0,
+            'return_on_equity_median': 0.09,
+            'profit_margin_median': 0.10
+        }
+    }
     
-    for component, score in growth_components.items():
-        weight = weights.get(component, 0)
-        weighted_score += score * weight
-        total_weight += weight
+    # Add basic fallback for unlisted sectors
+    default_benchmarks = {
+        'pe_ratio_median': 20.0,
+        'price_to_book_median': 3.5,
+        'price_to_sales_median': 5.0,
+        'return_on_equity_median': 0.12,
+        'profit_margin_median': 0.10
+    }
     
-    # Normalize to 0-10 scale
-    category_scores['growth'] = (weighted_score / total_weight) if total_weight > 0 else 0
+    return fallback_benchmarks.get(sector, default_benchmarks)
+
+# Load sector benchmarks on startup
+sector_benchmarks_data = load_sector_benchmarks()
+
+def get_sector_benchmarks(sector):
+    """Get sector-specific benchmark values from loaded data"""
+    global sector_benchmarks_data
     
-    # Financial Health Score
-    health_score = 0
-    health_count = 0
+    if sector in sector_benchmarks_data:
+        return sector_benchmarks_data[sector]
+    else:
+        print(f"Sector '{sector}' not found in benchmarks, using fallback")
+        return get_fallback_sector_benchmarks(sector)
+
+def score_metric_relative_to_sector(value, metric_type, sector, higher_is_better=True):
+    """Simplified scoring: compare to sector median with magnitude consideration"""
+    if value is None or value <= 0:
+        return 0
+    
+    benchmarks = get_sector_benchmarks(sector)
+    
+    # Get median value for this metric type
+    median_key = f"{metric_type}_median"
+    
+    # Handle legacy naming for some metrics
+    if metric_type == "pb" and median_key not in benchmarks:
+        median_key = "price_to_book_median"
+    elif metric_type == "ps" and median_key not in benchmarks:
+        median_key = "price_to_sales_median"
+    elif metric_type == "roe" and median_key not in benchmarks:
+        median_key = "return_on_equity_median"
+    
+    if median_key not in benchmarks:
+        # Fallback to absolute scoring if metric not in benchmarks
+        return score_metric_absolute(value, metric_type)
+    
+    median = benchmarks[median_key]
+    
+    # Calculate percentage difference from median
+    if higher_is_better:
+        # For metrics like ROE, profit margin (higher = better)
+        # value > median is good
+        if value >= median * 1.5:      # 50% better than median
+            return 10
+        elif value >= median * 1.25:   # 25% better than median  
+            return 9
+        elif value >= median * 1.1:    # 10% better than median
+            return 8
+        elif value >= median:          # At or above median
+            return 7
+        elif value >= median * 0.9:    # Within 10% of median
+            return 6
+        elif value >= median * 0.75:   # 25% below median
+            return 4
+        elif value >= median * 0.5:    # 50% below median
+            return 2
+        else:                          # More than 50% below median
+            return 1
+    else:
+        # For metrics like P/E, P/B (lower = better)
+        # value < median is good
+        if value <= median * 0.67:     # 33% better than median (much lower)
+            return 10
+        elif value <= median * 0.8:    # 20% better than median
+            return 9
+        elif value <= median * 0.9:    # 10% better than median
+            return 8
+        elif value <= median:          # At or below median
+            return 7
+        elif value <= median * 1.1:    # Within 10% of median
+            return 6
+        elif value <= median * 1.25:   # 25% above median
+            return 4
+        elif value <= median * 1.5:    # 50% above median
+            return 2
+        else:                          # More than 50% above median
+            return 1
+
+def score_metric_absolute(value, metric_type):
+    """Fallback absolute scoring for metrics without sector benchmarks"""
+    if metric_type == "pe_ratio":
+        if value < 15: return 10
+        elif value < 25: return 7
+        elif value < 35: return 4
+        else: return 1
+    elif metric_type == "price_to_book":
+        if value < 1.5: return 10
+        elif value < 3: return 7
+        elif value < 5: return 4
+        else: return 1
+    elif metric_type == "return_on_equity":
+        if value > 0.20: return 10
+        elif value > 0.15: return 8
+        elif value > 0.10: return 6
+        elif value > 0.05: return 3
+        else: return 1
+    elif metric_type == "profit_margin":
+        if value > 0.20: return 10
+        elif value > 0.15: return 8
+        elif value > 0.10: return 6
+        elif value > 0.05: return 3
+        else: return 1
+    else:
+        return 5  # Default middle score
+
+def calculate_fundamental_analysis(metrics):
+    """Calculate fundamental analysis with clear sector comparison and growth metrics"""
+    if not metrics:
+        return {
+            'sector_comparison': {},
+            'growth_analysis': {},
+            'company_info': {}
+        }
+    
+    # Get company sector for comparison
+    sector = metrics.get('sector', 'Technology')  # Default to Technology if no sector
+    sector_benchmarks = get_sector_benchmarks(sector)
+    print(f"Analyzing {sector} sector comparison")
+    
+    # Part 1: Sector Comparison - Company vs Peers
+    sector_comparison = {
+        'sector_name': sector,
+        'metrics': {}
+    }
+    
+    # P/E Ratio Comparison
+    company_pe = metrics.get('pe_ratio')
+    sector_pe_median = sector_benchmarks.get('pe_ratio_median')
+    if company_pe and sector_pe_median:
+        sector_comparison['metrics']['pe_ratio'] = {
+            'label': 'Price-to-Earnings Ratio',
+            'company_value': round(company_pe, 2),
+            'sector_median': round(sector_pe_median, 2),
+            'comparison': 'Lower is Better',
+            'better_than_sector': company_pe < sector_pe_median
+        }
+    
+    # Price-to-Book Comparison
+    company_pb = metrics.get('price_to_book')
+    sector_pb_median = sector_benchmarks.get('price_to_book_median')
+    if company_pb and sector_pb_median:
+        sector_comparison['metrics']['price_to_book'] = {
+            'label': 'Price-to-Book Ratio',
+            'company_value': round(company_pb, 2),
+            'sector_median': round(sector_pb_median, 2),
+            'comparison': 'Lower is Better',
+            'better_than_sector': company_pb < sector_pb_median
+        }
+    
+    # Price-to-Sales Comparison
+    company_ps = metrics.get('price_to_sales')
+    sector_ps_median = sector_benchmarks.get('price_to_sales_median')
+    if company_ps and sector_ps_median:
+        sector_comparison['metrics']['price_to_sales'] = {
+            'label': 'Price-to-Sales Ratio',
+            'company_value': round(company_ps, 2),
+            'sector_median': round(sector_ps_median, 2),
+            'comparison': 'Lower is Better',
+            'better_than_sector': company_ps < sector_ps_median
+        }
+    
+    # Return on Equity Comparison
+    company_roe = metrics.get('return_on_equity')
+    sector_roe_median = sector_benchmarks.get('return_on_equity_median')
+    if company_roe and sector_roe_median:
+        sector_comparison['metrics']['return_on_equity'] = {
+            'label': 'Return on Equity',
+            'company_value': f"{round(company_roe * 100, 1)}%",
+            'sector_median': f"{round(sector_roe_median * 100, 1)}%",
+            'comparison': 'Higher is Better',
+            'better_than_sector': company_roe > sector_roe_median
+        }
+    
+    # Profit Margin Comparison
+    company_margin = metrics.get('profit_margin')
+    sector_margin_median = sector_benchmarks.get('profit_margin_median')
+    if company_margin and sector_margin_median:
+        sector_comparison['metrics']['profit_margin'] = {
+            'label': 'Profit Margin',
+            'company_value': f"{round(company_margin * 100, 1)}%",
+            'sector_median': f"{round(sector_margin_median * 100, 1)}%",
+            'comparison': 'Higher is Better',
+            'better_than_sector': company_margin > sector_margin_median
+        }
+    
+    # Part 2: Growth Analysis - Company's Own Growth Metrics
+    growth_analysis = {
+        'metrics': {}
+    }
+    
+    # Revenue Growth
+    revenue_growth = metrics.get('revenue_growth_yoy') or metrics.get('revenue_growth')
+    if revenue_growth is not None:
+        growth_analysis['metrics']['revenue_growth'] = {
+            'label': 'Revenue Growth',
+            'value': f"{round(revenue_growth * 100, 1)}%",
+            'raw_value': revenue_growth,
+            'interpretation': get_growth_interpretation(revenue_growth, 'revenue')
+        }
+    
+    # Earnings Growth
+    earnings_growth = metrics.get('earnings_growth')
+    if earnings_growth is not None:
+        growth_analysis['metrics']['earnings_growth'] = {
+            'label': 'Earnings Growth',
+            'value': f"{round(earnings_growth * 100, 1)}%",
+            'raw_value': earnings_growth,
+            'interpretation': get_growth_interpretation(earnings_growth, 'earnings')
+        }
+    
+    # Operating Cash Flow Growth
+    ocf_growth = metrics.get('ocf_growth_yoy')
+    if ocf_growth is not None:
+        growth_analysis['metrics']['ocf_growth'] = {
+            'label': 'Operating Cash Flow Growth',
+            'value': f"{round(ocf_growth * 100, 1)}%",
+            'raw_value': ocf_growth,
+            'interpretation': get_growth_interpretation(ocf_growth, 'ocf')
+        }
+    
+    # ROE Growth
+    roe_growth = metrics.get('roe_growth_yoy')
+    if roe_growth is not None:
+        growth_analysis['metrics']['roe_growth'] = {
+            'label': 'ROE Growth',
+            'value': f"{round(roe_growth * 100, 1)}%",
+            'raw_value': roe_growth,
+            'interpretation': get_growth_interpretation(roe_growth, 'roe')
+        }
+    
+    # Company Information
+    company_info = {
+        'name': metrics.get('company_name', 'Unknown'),
+        'sector': sector,
+        'industry': metrics.get('industry', 'Unknown'),
+        'current_price': metrics.get('current_price'),
+        'market_cap': metrics.get('market_cap')
+    }
+    
+    # Financial Health Metrics (simple display)
+    financial_health = {}
     
     debt_to_equity = metrics.get('debt_to_equity')
     if debt_to_equity is not None:
-        if debt_to_equity < 0.3:
-            health_score += 10
-        elif debt_to_equity < 0.6:
-            health_score += 8
-        elif debt_to_equity < 1.0:
-            health_score += 6
-        elif debt_to_equity < 2.0:
-            health_score += 3
-        else:
-            health_score += 1
-        health_count += 1
+        financial_health['debt_to_equity'] = {
+            'label': 'Debt-to-Equity Ratio',
+            'value': round(debt_to_equity, 2),
+            'interpretation': get_debt_interpretation(debt_to_equity)
+        }
     
     current_ratio = metrics.get('current_ratio')
     if current_ratio is not None:
-        if 1.5 <= current_ratio <= 3:
-            health_score += 10
-        elif 1.2 <= current_ratio < 1.5 or 3 < current_ratio <= 4:
-            health_score += 7
-        elif 1.0 <= current_ratio < 1.2 or 4 < current_ratio <= 5:
-            health_score += 4
-        else:
-            health_score += 1
-        health_count += 1
-    
-    category_scores['financial_health'] = (health_score / max(health_count, 1)) if health_count > 0 else 0
-    
-    # Calculate total score
-    total_score = sum(category_scores.values()) / len(category_scores)
-    
-    # Determine ranking and recommendation
-    if total_score >= 8:
-        ranking = 'EXCELLENT'
-        recommendation = 'STRONG BUY'
-    elif total_score >= 6:
-        ranking = 'GOOD'
-        recommendation = 'BUY'
-    elif total_score >= 4:
-        ranking = 'AVERAGE'
-        recommendation = 'HOLD'
-    elif total_score >= 2:
-        ranking = 'BELOW_AVERAGE'
-        recommendation = 'SELL'
-    else:
-        ranking = 'POOR'
-        recommendation = 'STRONG SELL'
+        financial_health['current_ratio'] = {
+            'label': 'Current Ratio',
+            'value': round(current_ratio, 2),
+            'interpretation': get_liquidity_interpretation(current_ratio)
+        }
     
     return {
-        'total_score': total_score,
-        'category_scores': category_scores,
-        'ranking': ranking,
-        'recommendation': recommendation
+        'sector_comparison': sector_comparison,
+        'growth_analysis': growth_analysis,
+        'financial_health': financial_health,
+        'company_info': company_info
     }
+
+def get_growth_interpretation(growth_rate, metric_type):
+    """Get simple interpretation for growth rates"""
+    if growth_rate is None:
+        return "Data not available"
+    
+    if metric_type in ['revenue', 'earnings']:
+        if growth_rate >= 0.20:
+            return "Excellent - Strong growth"
+        elif growth_rate >= 0.10:
+            return "Good - Solid growth"
+        elif growth_rate >= 0.05:
+            return "Moderate - Steady growth"
+        elif growth_rate >= 0:
+            return "Slow - Minimal growth"
+        else:
+            return "Declining - Negative growth"
+    
+    elif metric_type == 'ocf':
+        if growth_rate >= 0.15:
+            return "Excellent - Strong cash generation"
+        elif growth_rate >= 0.05:
+            return "Good - Healthy cash flow"
+        elif growth_rate >= 0:
+            return "Stable - Positive cash flow"
+        elif growth_rate >= -0.05:
+            return "Concerning - Slight decline"
+        else:
+            return "Weak - Declining cash flow"
+    
+    elif metric_type == 'roe':
+        if growth_rate >= 0.10:
+            return "Excellent - Improving efficiency"
+        elif growth_rate >= 0.05:
+            return "Good - Better returns"
+        elif growth_rate >= 0:
+            return "Stable - Maintaining efficiency"
+        elif growth_rate >= -0.05:
+            return "Watch - Slight decline"
+        else:
+            return "Concerning - Declining efficiency"
+    
+    return "Unknown"
+
+def get_debt_interpretation(debt_to_equity):
+    """Get interpretation for debt-to-equity ratio"""
+    if debt_to_equity is None:
+        return "Data not available"
+    
+    if 0.3 <= debt_to_equity <= 1.2:
+        return "Optimal - Balanced capital structure"
+    elif 0.1 <= debt_to_equity < 0.3:
+        return "Conservative - Low debt usage"
+    elif 1.2 < debt_to_equity <= 1.8:
+        return "Aggressive - Higher leverage"
+    elif debt_to_equity < 0.1:
+        return "Very Conservative - Minimal debt"
+    elif 1.8 < debt_to_equity <= 2.5:
+        return "High Leverage - Monitor closely"
+    else:
+        return "Very High - Potential concern"
+
+def get_liquidity_interpretation(current_ratio):
+    """Get interpretation for current ratio"""
+    if current_ratio is None:
+        return "Data not available"
+    
+    if 1.5 <= current_ratio <= 3.0:
+        return "Good - Healthy liquidity"
+    elif 1.2 <= current_ratio < 1.5:
+        return "Adequate - Sufficient liquidity"
+    elif 3.0 < current_ratio <= 4.0:
+        return "High - Excess cash (could be more efficient)"
+    elif 1.0 <= current_ratio < 1.2:
+        return "Tight - Monitor cash flow"
+    elif current_ratio > 4.0:
+        return "Very High - Inefficient cash usage"
+    else:
+        return "Concerning - Liquidity issues"
+
+def get_simple_overall_recommendation(fundamental_analysis, technical_recommendation):
+    """Get simple overall recommendation based on clear metrics"""
+    # Count positive indicators from sector comparison
+    sector_positives = 0
+    sector_metrics = fundamental_analysis.get('sector_comparison', {}).get('metrics', {})
+    
+    for metric_data in sector_metrics.values():
+        if metric_data.get('better_than_sector', False):
+            sector_positives += 1
+    
+    # Count positive growth indicators
+    growth_positives = 0
+    growth_metrics = fundamental_analysis.get('growth_analysis', {}).get('metrics', {})
+    
+    for metric_data in growth_metrics.values():
+        if metric_data.get('raw_value', 0) > 0.05:  # 5% or higher growth
+            growth_positives += 1
+    
+    # Simple recommendation logic
+    total_sector_metrics = len(sector_metrics)
+    total_growth_metrics = len(growth_metrics)
+    
+    # Strong fundamentals: majority of metrics better than sector AND positive growth
+    if (total_sector_metrics > 0 and sector_positives >= total_sector_metrics * 0.6 and
+        total_growth_metrics > 0 and growth_positives >= total_growth_metrics * 0.5):
+        if technical_recommendation == 'BUY':
+            return 'STRONG BUY'
+        else:
+            return 'BUY'
+    
+    # Decent fundamentals: some metrics better than sector OR good growth
+    elif (sector_positives > 0 or growth_positives >= 2):
+        if technical_recommendation == 'BUY':
+            return 'BUY'
+        elif technical_recommendation == 'SELL':
+            return 'HOLD'
+        else:
+            return 'HOLD'
+    
+    # Weak fundamentals
+    else:
+        if technical_recommendation == 'SELL':
+            return 'SELL'
+        else:
+            return 'HOLD'
 
 def get_technical_recommendation(stock_data):
     """Get technical analysis recommendation based on latest signals"""
@@ -539,26 +941,14 @@ def get_stock_data(symbol):
     
     # Get fundamental data
     fundamental_metrics = fundamental_cache.get(symbol, {})
-    fundamental_score = calculate_fundamental_score(fundamental_metrics)
+    fundamental_analysis = calculate_fundamental_analysis(fundamental_metrics)
     
     # Get technical data
     stock_data = data_cache.get(symbol, pd.DataFrame())
     technical_recommendation = get_technical_recommendation(stock_data)
     
-    # Combine recommendations
-    fundamental_rec = fundamental_score.get('recommendation', 'HOLD')
-    
-    # Overall recommendation logic
-    if fundamental_rec in ['STRONG BUY', 'BUY'] and technical_recommendation == 'BUY':
-        overall_recommendation = 'STRONG BUY'
-    elif fundamental_rec in ['STRONG BUY', 'BUY'] or technical_recommendation == 'BUY':
-        overall_recommendation = 'BUY'
-    elif fundamental_rec in ['STRONG SELL', 'SELL'] and technical_recommendation == 'SELL':
-        overall_recommendation = 'STRONG SELL'
-    elif fundamental_rec in ['STRONG SELL', 'SELL'] or technical_recommendation == 'SELL':
-        overall_recommendation = 'SELL'
-    else:
-        overall_recommendation = 'HOLD'
+    # Simple overall recommendation based on growth and sector comparison
+    overall_recommendation = get_simple_overall_recommendation(fundamental_analysis, technical_recommendation)
     
     # Format fundamental metrics for display
     formatted_metrics = {}
@@ -583,7 +973,7 @@ def get_stock_data(symbol):
     return jsonify({
         'symbol': symbol,
         'fundamental_metrics': formatted_metrics,
-        'fundamental_score': fundamental_score,
+        'fundamental_analysis': fundamental_analysis,
         'technical_recommendation': technical_recommendation,
         'overall_recommendation': overall_recommendation,
         'last_updated': stock_last_update.strftime('%Y-%m-%d %H:%M:%S') if stock_last_update else 'N/A'
@@ -698,6 +1088,85 @@ def remove_from_portfolio():
         return jsonify({'message': f'Successfully removed {symbol} from portfolio'})
     else:
         return jsonify({'error': 'Failed to save portfolio'}), 500
+
+@app.route('/api/benchmarks/refresh', methods=['POST'])
+def refresh_sector_benchmarks():
+    """Calculate and save sector benchmarks to JSON file"""
+    try:
+        print("Starting sector benchmark calculation...")
+        
+        # Calculate all sector benchmarks
+        new_benchmarks = calculate_all_sector_benchmarks()
+        
+        if new_benchmarks:
+            # Reload the global benchmarks data
+            global sector_benchmarks_data
+            sector_benchmarks_data = new_benchmarks
+            
+            # Get metadata for response
+            metadata = new_benchmarks.get('_metadata', {})
+            sectors_calculated = [k for k in new_benchmarks.keys() if not k.startswith('_')]
+            
+            return jsonify({
+                'message': 'Sector benchmarks calculated and saved successfully',
+                'sectors_calculated': sectors_calculated,
+                'total_sectors': len(sectors_calculated),
+                'last_updated': metadata.get('last_updated'),
+                'file_saved': 'sector_benchmarks.json'
+            })
+        else:
+            return jsonify({'error': 'Failed to calculate sector benchmarks'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to refresh benchmarks: {str(e)}'}), 500
+
+@app.route('/api/benchmarks/status', methods=['GET'])
+def get_benchmark_status():
+    """Get status of sector benchmark file"""
+    try:
+        global sector_benchmarks_data
+        
+        # Check if file exists
+        benchmarks_file = 'sector_benchmarks.json'
+        file_exists = os.path.exists(benchmarks_file)
+        
+        if file_exists:
+            file_stat = os.stat(benchmarks_file)
+            file_modified = datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+            file_size = f"{file_stat.st_size / 1024:.1f} KB"
+        else:
+            file_modified = "Never"
+            file_size = "0 KB"
+        
+        # Get metadata from loaded data
+        metadata = sector_benchmarks_data.get('_metadata', {})
+        sectors_available = [k for k in sector_benchmarks_data.keys() if not k.startswith('_')]
+        
+        # Check representative stocks status
+        representative_stocks = get_sector_representative_stocks()
+        
+        return jsonify({
+            'file_status': {
+                'exists': file_exists,
+                'path': benchmarks_file,
+                'last_modified': file_modified,
+                'size': file_size
+            },
+            'benchmark_data': {
+                'total_sectors': len(sectors_available),
+                'sectors_available': sectors_available,
+                'last_calculated': metadata.get('last_updated', 'Unknown'),
+                'calculation_method': metadata.get('calculation_method', 'Unknown'),
+                'using_fallback': metadata.get('last_updated') == 'fallback'
+            },
+            'representative_stocks': {
+                'total_stocks': sum(len(stocks) for stocks in representative_stocks.values()),
+                'stocks_per_sector': {sector: len(stocks) for sector, stocks in representative_stocks.items()}
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to get benchmark status: {str(e)}'}), 500
 
 def validate_growth_data(quarterly_data, metric_name, required_quarters=4):
     """Validate data quality for growth calculations"""

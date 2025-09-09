@@ -168,9 +168,12 @@
 
             <!-- Portfolio Management Toggle -->
             <div class="row mb-4">
-                <div class="col-md-12 text-center">
-                    <button class="btn btn-outline-primary" id="togglePortfolioBtn" onclick="togglePortfolioManagement()">
+                <div class="col-md-12 text-right">
+                    <button class="btn btn-outline-primary mr-2" id="togglePortfolioBtn" onclick="togglePortfolioManagement()">
                         <i class="fas fa-cog"></i> Manage Portfolio
+                    </button>
+                    <button class="btn btn-outline-primary" onclick="toggleBenchmarkManagement()">
+                        <i class="fas fa-database"></i> Manage Sector Benchmarks
                     </button>
                 </div>
             </div>
@@ -204,6 +207,49 @@
                             </button>
                         </div>
                         <small class="text-muted">Select a stock to remove from your portfolio</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Benchmark Management Panel (Hidden by default) -->
+            <div class="row mb-4" id="benchmarkManagement" style="display: none;">
+                <div class="col-md-12">
+                    <div class="metric-card">
+                        <h5><i class="fas fa-database"></i> Sector Benchmark Management</h5>
+                        <p class="text-muted">Sector medians are calculated from representative stocks and saved to a file for optimal performance.</p>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <button class="btn btn-primary" onclick="refreshBenchmarks()">
+                                    <i class="fas fa-calculator"></i> Calculate & Save Benchmarks
+                                </button>
+                                <button class="btn btn-info ms-2" onclick="getBenchmarkStatus()">
+                                    <i class="fas fa-info-circle"></i> Check Status
+                                </button>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="alert alert-info py-2 mb-0">
+                                    <small>
+                                        <strong>Note:</strong> This process analyzes 110 stocks across 11 sectors. 
+                                        Takes 2-3 minutes but only needs to be done occasionally.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="benchmarkStatus" class="mt-3" style="display: none;">
+                            <h6>Benchmark Status:</h6>
+                            <div id="benchmarkStatusContent"></div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <strong>How it works:</strong> The system fetches data for 10 representative stocks per sector, 
+                                calculates the median for P/E, P/B, P/S, ROE, and Profit Margin, 
+                                then saves the results to <code>sector_benchmarks.json</code> for fast access.
+                                Stocks are scored based on how much better/worse they are compared to their sector median.
+                            </small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -242,18 +288,33 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-12">
                         <div class="metric-card">
-                            <h4><i class="fas fa-star"></i> Fundamental Score</h4>
-                            <div id="fundamentalScore"></div>
+                            <h4><i class="fas fa-chart-line"></i> Fundamental Analysis</h4>
+                            <small class="text-muted">Clear comparison with sector peers and growth metrics</small>
                             
-                            <h5 class="mt-4">Category Scores:</h5>
-                            <div id="categoryScores"></div>
-                            
-                            <div class="mt-3">
-                                <strong>Fundamental Recommendation:</strong>
-                                <div id="fundamentalRecommendation"></div>
+                            <!-- Sector Comparison Section -->
+                            <div class="mt-3" id="sectorComparison" style="display: none;">
+                                <h5><i class="fas fa-balance-scale"></i> Sector Comparison</h5>
+                                <p class="text-muted">How this company compares to its sector peers</p>
+                                <div id="sectorComparisonContent"></div>
                             </div>
+                            
+                            <!-- Growth Analysis Section -->
+                            <div class="mt-4" id="growthAnalysis" style="display: none;">
+                                <h5><i class="fas fa-trending-up"></i> Growth Analysis</h5>
+                                <p class="text-muted">Company's own growth performance</p>
+                                <div id="growthAnalysisContent"></div>
+                            </div>
+                            
+                            <!-- Financial Health Section -->
+                            <div class="mt-4" id="financialHealth" style="display: none;">
+                                <h5><i class="fas fa-heartbeat"></i> Financial Health</h5>
+                                <p class="text-muted">Key financial stability indicators</p>
+                                <div id="financialHealthContent"></div>
+                            </div>
+                            
+                            <div id="fundamentalAnalysis"></div>
                             
                             <div class="mt-3">
                                 <strong>Technical Recommendation:</strong>
@@ -388,29 +449,28 @@
                     metricsContainer.appendChild(metricDiv);
                 });
 
-                // Update fundamental score
-                const score = data.fundamental_score;
-                document.getElementById('fundamentalScore').innerHTML = `
-                    <h2 class="${getScoreClass(score.ranking)}">${score.total_score.toFixed(1)}/10</h2>
-                    <p class="${getScoreClass(score.ranking)}">${score.ranking}</p>
-                `;
-
-                // Update category scores
-                const categoryContainer = document.getElementById('categoryScores');
-                categoryContainer.innerHTML = '';
-                for (const [category, categoryScore] of Object.entries(score.category_scores)) {
-                    const categoryDiv = document.createElement('div');
-                    categoryDiv.className = 'metric-item';
-                    categoryDiv.innerHTML = `
-                        <span class="metric-label">${category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ')}:</span>
-                        <span class="metric-value">${categoryScore.toFixed(1)}/10</span>
-                    `;
-                    categoryContainer.appendChild(categoryDiv);
+                // Update fundamental analysis
+                const analysis = data.fundamental_analysis;
+                
+                // Show sector comparison
+                if (analysis.sector_comparison && Object.keys(analysis.sector_comparison.metrics || {}).length > 0) {
+                    document.getElementById('sectorComparison').style.display = 'block';
+                    updateSectorComparison(analysis.sector_comparison);
+                }
+                
+                // Show growth analysis
+                if (analysis.growth_analysis && Object.keys(analysis.growth_analysis.metrics || {}).length > 0) {
+                    document.getElementById('growthAnalysis').style.display = 'block';
+                    updateGrowthAnalysis(analysis.growth_analysis);
+                }
+                
+                // Show financial health
+                if (analysis.financial_health && Object.keys(analysis.financial_health).length > 0) {
+                    document.getElementById('financialHealth').style.display = 'block';
+                    updateFinancialHealth(analysis.financial_health);
                 }
 
                 // Update recommendations
-                document.getElementById('fundamentalRecommendation').innerHTML = 
-                    `<span class="recommendation-badge ${getRecommendationClass(score.recommendation)}">${score.recommendation}</span>`;
                 document.getElementById('technicalRecommendation').innerHTML = 
                     `<span class="recommendation-badge ${getRecommendationClass(data.technical_recommendation)}">${data.technical_recommendation}</span>`;
             }
@@ -424,6 +484,74 @@
                     case 'STRONG SELL': return 'strong-sell';
                     default: return 'hold';
                 }
+            }
+
+            // Functions to update the new analysis sections
+            function updateSectorComparison(sectorData) {
+                const container = document.getElementById('sectorComparisonContent');
+                let html = `<h6>Sector: ${sectorData.sector_name}</h6>`;
+                html += '<div class="table-responsive"><table class="table table-sm">';
+                html += '<thead><tr><th>Metric</th><th>Company</th><th>Sector Median</th><th>Status</th></tr></thead><tbody>';
+                
+                for (const [key, metric] of Object.entries(sectorData.metrics)) {
+                    const betterClass = metric.better_than_sector ? 'text-success' : 'text-danger';
+                    const betterIcon = metric.better_than_sector ? '✅' : '❌';
+                    
+                    html += `
+                        <tr>
+                            <td><strong>${metric.label}</strong></td>
+                            <td class="${betterClass}">${metric.company_value}</td>
+                            <td>${metric.sector_median}</td>
+                            <td class="${betterClass}">${betterIcon}</td>
+                        </tr>
+                    `;
+                }
+                
+                html += '</tbody></table></div>';
+                container.innerHTML = html;
+            }
+
+            function updateGrowthAnalysis(growthData) {
+                const container = document.getElementById('growthAnalysisContent');
+                let html = '<div class="row">';
+                
+                for (const [key, metric] of Object.entries(growthData.metrics)) {
+                    const growthClass = metric.raw_value >= 0.05 ? 'text-success' : 
+                                      metric.raw_value >= 0 ? 'text-warning' : 'text-danger';
+                    
+                    html += `
+                        <div class="col-md-6 mb-3">
+                            <div class="border rounded p-3">
+                                <h6>${metric.label}</h6>
+                                <h4 class="${growthClass}">${metric.value}</h4>
+                                <small class="text-muted">${metric.interpretation}</small>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+                container.innerHTML = html;
+            }
+
+            function updateFinancialHealth(healthData) {
+                const container = document.getElementById('financialHealthContent');
+                let html = '<div class="row">';
+                
+                for (const [key, metric] of Object.entries(healthData)) {
+                    html += `
+                        <div class="col-md-6 mb-3">
+                            <div class="border rounded p-3">
+                                <h6>${metric.label}</h6>
+                                <h5>${metric.value}</h5>
+                                <small class="text-muted">${metric.interpretation}</small>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+                container.innerHTML = html;
             }
 
             function getScoreClass(ranking) {
@@ -443,11 +571,11 @@
             if (portfolioSection.style.display === 'none') {
                 portfolioSection.style.display = 'flex';
                 toggleBtn.innerHTML = '<i class="fas fa-times"></i> Close Portfolio Management';
-                toggleBtn.className = 'btn btn-outline-danger';
+                toggleBtn.className = 'btn btn-outline-danger mr-2';
             } else {
                 portfolioSection.style.display = 'none';
                 toggleBtn.innerHTML = '<i class="fas fa-cog"></i> Manage Portfolio';
-                toggleBtn.className = 'btn btn-outline-primary';
+                toggleBtn.className = 'btn btn-outline-primary mr-2';
             }
         };
 
@@ -554,6 +682,148 @@
                 removeBtn.disabled = false;
                 removeBtn.innerHTML = '<i class="fas fa-trash"></i> Remove';
                 document.getElementById('removeStock').value = '';
+            });
+        };
+
+        // Benchmark Management Functions
+        window.toggleBenchmarkManagement = function() {
+            const panel = document.getElementById('benchmarkManagement');
+            const toggleBtn = document.querySelector('button[onclick="toggleBenchmarkManagement()"]');
+            
+            if (panel.style.display === 'none' || panel.style.display === '') {
+                panel.style.display = 'block';
+                toggleBtn.innerHTML = '<i class="fas fa-times"></i> Close Benchmarks';
+                toggleBtn.className = 'btn btn-outline-danger';
+            } else {
+                panel.style.display = 'none';
+                toggleBtn.innerHTML = '<i class="fas fa-database"></i> Manage Sector Benchmarks';
+                toggleBtn.className = 'btn btn-outline-primary';
+            }
+        };
+
+        window.refreshBenchmarks = function() {
+            const btn = document.querySelector('button[onclick="refreshBenchmarks()"]');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calculating...';
+
+            // Show progress message
+            const statusDiv = document.getElementById('benchmarkStatus');
+            const contentDiv = document.getElementById('benchmarkStatusContent');
+            contentDiv.innerHTML = '<div class="alert alert-info">Calculating sector benchmarks... This may take 2-3 minutes.</div>';
+            statusDiv.style.display = 'block';
+
+            fetch('/api/benchmarks/refresh', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                    contentDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                } else {
+                    alert(`Benchmark calculation completed!\nSectors: ${data.total_sectors}\nFile: ${data.file_saved}\nLast updated: ${data.last_updated}`);
+                    getBenchmarkStatus(); // Refresh status display
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error calculating benchmarks');
+                contentDiv.innerHTML = '<div class="alert alert-danger">Error calculating benchmarks</div>';
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-calculator"></i> Calculate & Save Benchmarks';
+            });
+        };
+
+        window.getBenchmarkStatus = function() {
+            const statusDiv = document.getElementById('benchmarkStatus');
+            const contentDiv = document.getElementById('benchmarkStatusContent');
+            const toggleBtn = document.querySelector('button[onclick="getBenchmarkStatus()"]');
+            
+            // Check if status is currently visible
+            if (statusDiv.style.display === 'block') {
+                // Hide the status
+                statusDiv.style.display = 'none';
+                toggleBtn.innerHTML = '<i class="fas fa-info-circle"></i> Check Status';
+                toggleBtn.className = 'btn btn-info ms-2';
+                return;
+            }
+            
+            // Show loading state
+            toggleBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+            toggleBtn.disabled = true;
+            
+            fetch('/api/benchmarks/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    contentDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                } else {
+                    const fileStatus = data.file_status;
+                    const benchmarkData = data.benchmark_data;
+                    const stockData = data.representative_stocks;
+                    
+                    let html = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>File Status:</h6>
+                                <ul class="list-unstyled">
+                                    <li><strong>File:</strong> ${fileStatus.path}</li>
+                                    <li><strong>Exists:</strong> <span class="badge ${fileStatus.exists ? 'bg-success' : 'bg-danger'}">${fileStatus.exists ? 'Yes' : 'No'}</span></li>
+                                    <li><strong>Last Modified:</strong> ${fileStatus.last_modified}</li>
+                                    <li><strong>Size:</strong> ${fileStatus.size}</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Benchmark Data:</h6>
+                                <ul class="list-unstyled">
+                                    <li><strong>Sectors:</strong> ${benchmarkData.total_sectors}</li>
+                                    <li><strong>Last Calculated:</strong> ${benchmarkData.last_calculated}</li>
+                                    <li><strong>Method:</strong> ${benchmarkData.calculation_method}</li>
+                                    <li><strong>Using Fallback:</strong> <span class="badge ${benchmarkData.using_fallback ? 'bg-warning' : 'bg-success'}">${benchmarkData.using_fallback ? 'Yes' : 'No'}</span></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <h6>Representative Stocks:</h6>
+                                <p><strong>Total:</strong> ${stockData.total_stocks} stocks across ${benchmarkData.total_sectors} sectors</p>
+                                <details>
+                                    <summary>View stocks per sector</summary>
+                                    <div class="mt-2">
+                    `;
+                    
+                    for (const [sector, count] of Object.entries(stockData.stocks_per_sector)) {
+                        html += `<span class="badge bg-secondary me-1 mb-1">${sector}: ${count} stocks</span>`;
+                    }
+                    
+                    html += `
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    `;
+                    
+                    contentDiv.innerHTML = html;
+                }
+                
+                // Show the status and update button
+                statusDiv.style.display = 'block';
+                toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i> Hide Status';
+                toggleBtn.className = 'btn btn-outline-info ms-2';
+                toggleBtn.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                contentDiv.innerHTML = '<div class="alert alert-danger">Error fetching benchmark status</div>';
+                statusDiv.style.display = 'block';
+                toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i> Hide Status';
+                toggleBtn.className = 'btn btn-outline-info ms-2';
+                toggleBtn.disabled = false;
             });
         };
 
