@@ -1,212 +1,120 @@
 # Stock Analysis Application V4
 
-A modern Flask-based web application for comprehensive stock portfolio analysis with on-demand data loading, real-time technical indicators, and advanced fundamental analysis.
+Flask-based stock analysis dashboard that combines on-demand market data, peer-relative fundamental checks, and momentum indicators for a manually curated portfolio.
 
-## 🆕 Latest Updates (v4.0)
+## What The App Does
 
-### ⚡ On-Demand Data Loading Architecture
-- **Instant App Startup**: No more waiting for all portfolio stocks to load
-- **Smart Selection-Based Loading**: Data fetches only when stock is selected
-- **Individual Stock Caching**: Each stock cached separately for 1 hour
-- **Improved Scalability**: Performance remains constant regardless of portfolio size
+- Loads stock data only when you select a symbol from the portfolio.
+- Caches downloaded market and fundamental data in memory for one hour per symbol.
+- Stores the last successful stock payload on disk so a recent snapshot can be reused if live fetches fail.
+- Shows fundamental metrics such as valuation, profitability, growth, and financial health.
+- Compares selected company metrics against sector benchmark medians stored in `sector_benchmarks.json`.
+- Generates a technical chart with a 30-day moving average, stochastic oscillator, and MACD.
+- Produces an explicit recommendation scorecard by combining sector-relative fundamentals with recent technical signals.
 
-## 📁 Project Structure
+## Current Project Structure
 
-```
+```text
 Stock AnalysisV4/
-├── app.py                      # 🔥 Main Flask application (refactored for on-demand loading)
-├── portfolio.json              # User portfolio configuration
-├── requirements.txt            # Python dependencies
-├── README.md                   # 📖 This documentation
-├── test_on_demand_loading.py   # 🧪 Test script for on-demand functionality
-├── performance_comparison.py   # 📊 Performance comparison demonstration
-├── templates/
-│   └── index.html             # Responsive web interface with Bootstrap
-├── logs/                       # Application logging
-│   ├── app_log.txt           # Main application logs
-│   └── app_log_new.txt       # Recent session logs
-├── docs/                       # Comprehensive documentation
-│   ├── CALCULATION_REVIEW.md  # Fundamental analysis calculations
-│   ├── EXPANSION_BRAINSTORM.md # Future feature ideas
-│   ├── EXPANSION_EXECUTIVE_SUMMARY.md # Executive summary
-│   ├── FINAL_STATUS_REPORT.md # Project status report
-│   ├── PORTFOLIO_MANAGEMENT.md # Portfolio management guide
-│   └── stock_analysis.ipynb   # Jupyter notebook analysis
-└── __pycache__/               # Python cache files
+├── app.py
+├── portfolio.json
+├── requirements.txt
+├── sector_benchmarks.json
+├── README.md
+├── docs/
+│   ├── CALCULATION_REVIEW.md
+│   ├── EXPANSION_BRAINSTORM.md
+│   ├── EXPANSION_EXECUTIVE_SUMMARY.md
+│   ├── FINAL_STATUS_REPORT.md
+│   ├── PORTFOLIO_MANAGEMENT.md
+│   ├── README.md
+│   └── stock_analysis.ipynb
+└── templates/
+    └── index.html
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
-- Python 3.8+ with pip
-- Internet connection for Yahoo Finance API
 
-### Installation & Startup
+- Python 3.8+
+- Internet access for Yahoo Finance requests
+
+### Run Locally
+
 ```bash
-# 1. Install dependencies
 pip install -r requirements.txt
-
-# 2. Run the application
 python app.py
-
-# 3. Open browser to
-http://localhost:5000
 ```
 
-### First Use
-1. **Add Stocks**: Use the "Manage Portfolio" button to add stock symbols (e.g., AAPL, MSFT, GOOGL)
-2. **Select Stock**: Choose any stock from the dropdown menu
-3. **View Analysis**: Stock data loads instantly with comprehensive analysis
+Then open `http://localhost:5000`.
 
-## 🎯 Key Features
+## How Analysis Works Today
 
-### ⚡ Performance & Architecture
+### Fundamental View
 
-#### On-Demand Loading System
-- **Zero Startup Time**: App launches instantly without pre-loading data
-- **Selective Data Fetching**: Only requested stocks are loaded from Yahoo Finance
-- **Intelligent Caching**: 
-  - Individual stock data cached for 1 hour
-  - Separate caches for technical and fundamental data
-  - Cache invalidation on portfolio changes
-- **Memory Efficient**: Minimal memory footprint until data is requested
+- Raw metrics are pulled from Yahoo Finance `info` and quarterly statements.
+- Growth metrics include quarterly year-over-year revenue growth, operating cash flow growth, and ROE growth.
+- Sector comparison uses stored medians for P/E, P/B, P/S, ROE, and profit margin.
+- The UI shows raw comparisons plus a recommendation scorecard with weighted component scores.
+- Scorecard weights can vary by sector instead of using a single global weighting scheme.
 
-#### Performance Benefits
-| Feature | Old Approach | New Approach | Improvement |
-|---------|-------------|--------------|-------------|
-| Startup Time | 10-30 seconds | <1 second | 🚀 30x faster |
-| Memory Usage | High (all stocks) | Low (on-demand) | 💾 70% reduction |
-| API Calls | All at startup | On selection | 🌐 90% reduction |
-| Scalability | Poor (linear) | Excellent (constant) | 📈 Unlimited |
+### Technical View
 
-### 📊 Advanced Analytics
+- Price history uses 300 daily bars with adjusted prices.
+- Indicators include a 30-day moving average, stochastic oscillator, and MACD.
+- Technical recommendation is derived from recent buy and sell signal counts over the last 10 days.
 
-#### Fundamental Analysis Scoring (0-10 Scale)
-- **ROE Growth** (35% weight): Year-over-year Return on Equity improvement
-- **Revenue Growth** (30% weight): Top-line expansion analysis
-- **Earnings Growth** (20% weight): Bottom-line profitability trends
-- **Operating Cash Flow Growth** (15% weight): Cash generation quality
+### Recommendation Logic
 
-#### Comprehensive Metrics
-- **Valuation**: P/E, Forward P/E, P/B, P/S, PEG ratios
-- **Profitability**: ROE, ROA, Profit/Operating margins
-- **Financial Health**: Debt/Equity, Current ratio, Cash position
-- **Growth**: Revenue, earnings, and cash flow growth rates
-- **Market**: Beta, 52-week range, dividend yield
+- Overall recommendation is derived from an explicit scorecard.
+- The current scorecard uses sector-specific weight profiles, with a default baseline of 45% sector alignment, 35% growth quality, and 20% technical momentum.
+- Each component is exposed by the stock API so the UI can show how the final label was formed.
 
-#### Technical Analysis
-- **Moving Averages**: 30-day trend analysis
-- **MACD**: Momentum and trend changes
-- **Stochastic Oscillator**: Overbought/oversold conditions
-- **Signal Generation**: Combined buy/sell recommendations
-- **Interactive Charts**: Real-time technical visualizations
+### Resilience Behavior
 
-### 🎛️ Portfolio Management
-- **Dynamic Adding/Removing**: Real-time portfolio modifications
-- **Symbol Validation**: Automatic verification of stock symbols
-- **Company Information**: Automatic fetching of company names and details
-- **Portfolio Persistence**: JSON-based storage with backup
+- Live Yahoo Finance requests are retried before the app gives up on a symbol.
+- If all retries fail, the app attempts to load the last successful on-disk snapshot for that symbol.
+- The UI surfaces whether the result came from a fresh fetch, in-memory cache, or disk snapshot.
 
-### 🎨 User Experience
-- **Responsive Design**: Bootstrap-based mobile-friendly interface
-- **Real-time Loading**: Progress indicators and loading states
-- **Error Handling**: Graceful degradation with informative messages
-- **Recommendation System**: Combined fundamental + technical analysis
+## Data Files
 
-## 🧪 Testing & Validation
+### `portfolio.json`
 
-### Available Test Scripts
-```bash
-# Test on-demand loading functionality
-python test_on_demand_loading.py
+- Stores portfolio entries with `symbol`, `name`, and `date_added`.
+- Changes made in the UI are written directly back to this file.
 
-# Compare performance of old vs new approach
-python performance_comparison.py
+### `sector_benchmarks.json`
 
-# Run comprehensive test suite
-python tests/test_enhanced_metrics.py
-python tests/test_calculation_logic.py
-```
+- Stores precomputed sector medians and metadata.
+- Can be refreshed from the UI with the benchmark management controls.
+- The app falls back to static defaults if the file is missing or unreadable.
 
-## 📈 Performance Monitoring
+## Important Limitations
 
-### Caching Strategy
-- **Stock Data**: 1-hour cache per symbol
-- **Fundamental Metrics**: Cached with stock data
-- **Technical Indicators**: Calculated and cached together
-- **Cache Invalidation**: Automatic cleanup on portfolio changes
+- Cache state is held in process memory, so it is not shared across workers or restarts.
+- Portfolio persistence is file-based and assumes a single local user.
+- Benchmarks depend on a hard-coded representative stock list rather than a dynamic market universe.
+- The current automated tests are focused on benchmark math, the recommendation scorecard, and JSON error responses.
+- Flask now defaults to `127.0.0.1:5000` with debug mode off unless `FLASK_HOST`, `FLASK_PORT`, or `FLASK_DEBUG` are set.
 
-### Resource Usage
-- **Startup Memory**: ~50MB (minimal Flask app)
-- **Per Stock Memory**: ~5-10MB (300 days of data + indicators)
-- **API Rate Limiting**: Respectful Yahoo Finance usage
-- **Network Efficiency**: Only fetch when needed
+## Dependencies
 
-## 🔧 Configuration
+- Flask
+- yfinance
+- pandas
+- matplotlib
+- numpy
 
-### Portfolio Management
-- **File**: `portfolio.json`
-- **Format**: JSON array with symbol, name, and date_added
-- **Auto-backup**: Automatic backup on modifications
-- **Validation**: Symbol verification through Yahoo Finance
+## Suggested Next Improvements
 
-### Logging
-- **Main Log**: `logs/app_log.txt`
-- **Session Log**: `logs/app_log_new.txt`
-- **Levels**: INFO, WARNING, ERROR with timestamps
+1. Replace debug mode and `print`-based diagnostics with proper logging and configuration.
+2. Add automated tests around benchmark math and recommendation logic.
+3. Move portfolio and cache state to a durable backend if you want multi-user or hosted use.
+4. Make the recommendation model fully transparent by exposing explicit component scores.
 
-## 🚀 Future Enhancements
+## Status
 
-### Planned Features
-- **Real-time Data**: WebSocket integration for live updates
-- **Advanced Charting**: Interactive candlestick charts
-- **Alert System**: Price and signal-based notifications
-- **Export Functionality**: PDF reports and CSV exports
-- **Mobile App**: React Native companion app
-
-### Architecture Improvements
-- **Database Integration**: PostgreSQL for large portfolios
-- **API Rate Limiting**: Smart request queuing
-- **Background Jobs**: Celery for heavy computations
-- **Load Balancing**: Multiple worker processes
-
-## 🤝 Contributing
-
-### Development Setup
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Run tests: `python -m pytest tests/`
-4. Commit changes: `git commit -m 'Add amazing feature'`
-5. Push to branch: `git push origin feature/amazing-feature`
-6. Open Pull Request
-
-### Code Standards
-- **PEP 8**: Python style guide compliance
-- **Type Hints**: All functions should include type annotations
-- **Documentation**: Comprehensive docstrings required
-- **Testing**: Unit tests for all new features
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🔗 Dependencies
-
-### Core Dependencies
-- **Flask**: Web framework
-- **yfinance**: Yahoo Finance API
-- **pandas**: Data manipulation
-- **matplotlib**: Chart generation
-- **numpy**: Numerical computations
-
-### Development Dependencies
-- **pytest**: Testing framework
-- **black**: Code formatting
-- **flake8**: Linting
-- **mypy**: Type checking
-
----
-
-**Version**: 4.0  
-**Last Updated**: September 2025  
-**Compatibility**: Python 3.8+, All major browsers
+- Version: 4.0
+- Last updated: May 2026
+- Intended use: local analysis workflow
