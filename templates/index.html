@@ -161,6 +161,46 @@
             gap: 12px;
             margin-bottom: 24px;
         }
+        .main-tabs {
+            border-bottom: 1px solid var(--line);
+            margin-bottom: 24px;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .main-tabs .nav-link {
+            border: none;
+            border-radius: 999px 999px 0 0;
+            padding: 12px 22px;
+            font-weight: 700;
+            color: var(--text-muted);
+            background: transparent;
+            transition: all 0.2s ease;
+        }
+        .main-tabs .nav-link i {
+            margin-right: 6px;
+        }
+        .main-tabs .nav-link:hover {
+            color: var(--text-main);
+            background: rgba(15, 118, 110, 0.08);
+            border-color: transparent;
+            isolation: isolate;
+        }
+        .main-tabs .nav-link.active {
+            color: var(--accent-strong);
+            background: var(--accent-soft);
+            border-color: transparent;
+        }
+        .placeholder-panel {
+            text-align: center;
+            padding: 60px 24px;
+            color: var(--text-muted);
+        }
+        .placeholder-panel i {
+            font-size: 2.4rem;
+            color: var(--accent);
+            margin-bottom: 14px;
+            display: block;
+        }
         .btn {
             border-radius: 999px;
             padding: 12px 22px;
@@ -686,6 +726,42 @@
             padding: 18px;
             margin-top: 18px;
         }
+        .chart-pane-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin: 18px 0 8px;
+        }
+        .chart-pane-title:first-child {
+            margin-top: 0;
+        }
+        .chart-pane {
+            border-radius: 12px;
+            overflow: hidden;
+            background: #fff;
+            border: 1px solid rgba(17, 33, 45, 0.06);
+        }
+        .chart-pane-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+        .chart-pane-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .chart-pane-legend .swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            display: inline-block;
+        }
         .history-list {
             display: grid;
             gap: 10px;
@@ -788,251 +864,504 @@
                 </div>
             </div>
 
-            <div class="action-strip">
-                    <button class="btn btn-outline-primary" id="togglePortfolioBtn" onclick="togglePortfolioManagement()">
-                        <i class="fas fa-cog"></i> Manage Portfolio
+            <ul class="nav nav-tabs main-tabs" id="mainTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="watchlist-tab" data-tab-target="#watchlist-pane" type="button" role="tab" aria-controls="watchlist-pane" aria-selected="true">
+                        <i class="fas fa-eye"></i> Watchlist
                     </button>
-                    <button class="btn btn-outline-primary" onclick="toggleBenchmarkManagement()">
-                        <i class="fas fa-database"></i> Manage Sector Benchmarks
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="holdings-tab" data-tab-target="#holdings-pane" type="button" role="tab" aria-controls="holdings-pane" aria-selected="false">
+                        <i class="fas fa-briefcase"></i> Holdings
                     </button>
-            </div>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="benchmarks-tab" data-tab-target="#benchmarks-pane" type="button" role="tab" aria-controls="benchmarks-pane" aria-selected="false">
+                        <i class="fas fa-database"></i> Benchmarks
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="backtesting-tab" data-tab-target="#backtesting-pane" type="button" role="tab" aria-controls="backtesting-pane" aria-selected="false">
+                        <i class="fas fa-flask"></i> Backtesting
+                    </button>
+                </li>
+            </ul>
 
-            <!-- Portfolio Management Section (Hidden by default) -->
-            <div class="row mb-4" id="portfolioManagement" style="display: none;">
-                <div class="col-md-12">
-                    <div class="metric-card management-shell">
-                        <div class="section-title-row">
-                            <div>
-                                <h5><i class="fas fa-cog"></i> Portfolio Management</h5>
-                                <p class="section-caption">Add new tickers, remove holdings, and keep the portfolio list aligned with the stocks you actually track.</p>
+            <div class="tab-content" id="mainTabsContent">
+                <!-- Watchlist Tab -->
+                <div class="tab-pane show active" id="watchlist-pane" role="tabpanel" aria-labelledby="watchlist-tab" tabindex="0">
+                    <div class="action-strip">
+                            <button class="btn btn-outline-primary" id="togglePortfolioBtn" onclick="togglePortfolioManagement()">
+                                <i class="fas fa-cog"></i> Manage Portfolio
+                            </button>
+                            <button class="btn btn-outline-secondary" id="checkChangesBtn" onclick="checkWatchlistChanges()">
+                                <i class="fas fa-bell"></i> Check for Changes
+                            </button>
+                    </div>
+
+                    <div id="watchlistChangesBanner" class="mb-4"></div>
+
+                    <!-- Portfolio Management Section (Hidden by default) -->
+                    <div class="row mb-4" id="portfolioManagement" style="display: none;">
+                        <div class="col-md-12">
+                            <div class="metric-card management-shell">
+                                <div class="section-title-row">
+                                    <div>
+                                        <h5><i class="fas fa-cog"></i> Portfolio Management</h5>
+                                        <p class="section-caption">Add new tickers, remove holdings, and keep the portfolio list aligned with the stocks you actually track.</p>
+                                    </div>
+                                    <span class="info-chip"><i class="fas fa-folder-tree"></i> Portfolio list controls</span>
+                                </div>
+
+                                <div class="management-toolbar">
+                                    <div class="management-action-card">
+                                        <div class="hero-kicker mb-2">Add Holdings</div>
+                                        <h6 class="mb-2">Add a new stock to the tracked portfolio</h6>
+                                        <p class="section-caption">Type the ticker symbol exactly as Yahoo Finance expects it.</p>
+                                        <div class="management-action-row">
+                                            <input type="text" class="form-control" id="newStock" placeholder="Enter stock symbol (e.g., TSLA)" style="text-transform: uppercase;">
+                                            <button class="btn btn-success" id="addStockBtn" onclick="addStock()">
+                                                <i class="fas fa-plus"></i> Add
+                                            </button>
+                                        </div>
+                                        <div id="portfolioActionFeedback" class="management-inline-status"></div>
+                                    </div>
+
+                                    <div class="management-action-card">
+                                        <div class="hero-kicker mb-2">Remove Holdings</div>
+                                        <h6 class="mb-2">Remove a stock from the tracked portfolio</h6>
+                                        <p class="section-caption">This updates the saved portfolio list and clears the symbol from the app dropdowns.</p>
+                                        <div class="management-action-row">
+                                            <select class="form-select" id="removeStock">
+                                                <option value="">Select stock to remove...</option>
+                                                {% for stock in stocks %}
+                                                <option value="{{ stock.symbol }}">{{ stock.symbol }} - {{ stock.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <button class="btn btn-danger" id="removeStockBtn" onclick="removeStock()">
+                                                <i class="fas fa-trash"></i> Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="management-footnote">
+                                    <small class="text-muted">
+                                        <strong>Tip:</strong> Adding or removing a symbol updates both the analysis selector and the removal dropdown immediately.
+                                    </small>
+                                </div>
                             </div>
-                            <span class="info-chip"><i class="fas fa-folder-tree"></i> Portfolio list controls</span>
+                        </div>
+                    </div>
+
+                    <!-- Loading Spinner -->
+                    <div id="loadingSpinner" class="loading" style="display: none;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-3">Fetching stock data...</p>
+                    </div>
+
+                    <!-- Stock Analysis Container -->
+                    <div id="stockAnalysis" style="display: none;">
+                    <div class="content-wrapper">
+                        <!-- Stock Header -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="stock-hero-card">
+                                    <div>
+                                        <div class="hero-kicker">Live Analysis</div>
+                                        <h2 id="stockTitle" class="mb-0"></h2>
+                                        <p id="stockInfo" class="text-muted mb-0"></p>
+                                        <div class="stock-hero-meta">
+                                            <span class="info-chip"><i class="fas fa-layer-group"></i><span id="stockSectorChip">Sector view</span></span>
+                                            <span class="info-chip"><i class="fas fa-clock"></i><span id="lastUpdated">Waiting for data</span></span>
+                                            <span class="info-chip" id="earningsChip" style="display: none;"><i class="fas fa-calendar-day"></i><span id="earningsChipText"></span></span>
+                                        </div>
+                                    </div>
+                                    <div class="text-md-end">
+                                        <div id="overallRecommendation"></div>
+                                        <p class="section-caption mb-0">Fundamentals + momentum</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="management-toolbar">
-                            <div class="management-action-card">
-                                <div class="hero-kicker mb-2">Add Holdings</div>
-                                <h6 class="mb-2">Add a new stock to the tracked portfolio</h6>
-                                <p class="section-caption">Type the ticker symbol exactly as Yahoo Finance expects it.</p>
-                                <div class="management-action-row">
-                                    <input type="text" class="form-control" id="newStock" placeholder="Enter stock symbol (e.g., TSLA)" style="text-transform: uppercase;">
-                                    <button class="btn btn-success" id="addStockBtn" onclick="addStock()">
-                                        <i class="fas fa-plus"></i> Add
+                        <div id="fetchStatusBanner" style="display: none;"></div>
+
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="metric-card analysis-section">
+                                    <div class="scorecard-header">
+                                        <div>
+                                            <h4><i class="fas fa-sliders-h"></i> Recommendation Scorecard</h4>
+                                            <p class="section-caption">What is driving the recommendation</p>
+                                        </div>
+                                        <div id="scorecardProfileSummary" class="scorecard-profile">Profile: Balanced</div>
+                                    </div>
+                                    <div id="recommendationScorecard" class="scorecard-grid mt-3"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fundamental Analysis Section -->
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="metric-card">
+                                    <div class="section-title-row">
+                                        <div>
+                                            <h3><i class="fas fa-calculator"></i> Fundamental Analysis</h3>
+                                            <p class="section-caption">Valuation, profitability, leverage, and growth</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Key Metrics Grid -->
+                                    <div class="metric-grid" id="fundamentalMetrics">
+                                        <!-- Metrics will be populated by JavaScript -->
+                                    </div>
+                                </div>
+                                <!-- Fundamental Details placed under the main Fundamental Analysis column -->
+                                <div class="metric-card analysis-section mt-3">
+                                    <div class="section-title-row">
+                                        <div>
+                                            <h4><i class="fas fa-info-circle"></i> Fundamental Details</h4>
+                                            <p class="section-caption">Sector, growth, and financial health breakdown</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Sector Comparison Section -->
+                                    <div class="mt-3" id="sectorComparison" style="display: none;">
+                                        <h6><i class="fas fa-balance-scale"></i> Sector Comparison</h6>
+                                        <div id="sectorComparisonContent"></div>
+                                    </div>
+
+                                    <!-- Growth Analysis Section -->
+                                    <div class="mt-3" id="growthAnalysis" style="display: none;">
+                                        <h6><i class="fas fa-trending-up"></i> Growth Analysis</h6>
+                                        <div id="growthAnalysisContent"></div>
+                                    </div>
+
+                                    <!-- Financial Health Section -->
+                                    <div class="mt-3" id="financialHealth" style="display: none;">
+                                        <h6><i class="fas fa-heartbeat"></i> Financial Health</h6>
+                                        <div id="financialHealthContent"></div>
+                                    </div>
+
+                                    <div id="fundamentalAnalysis" class="mt-3"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Technical Analysis Charts -->
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="chart-container">
+                                    <div class="tech-header">
+                                        <div>
+                                            <h3 class="mb-0"><i class="fas fa-chart-area"></i> Technical Analysis & Momentum Indicators</h3>
+                                            <p class="section-caption mb-0">Trend, stochastic, and MACD</p>
+                                        </div>
+                                        <div id="technicalRecommendation" class="tech-recommendation"></div>
+                                    </div>
+                                    <div class="chart-frame">
+                                        <div id="loadingChart" class="loading" style="display: none;">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading chart...</span>
+                                        </div>
+                                        <p class="mt-3">Loading technical analysis charts...</p>
+                                        </div>
+                                        <div id="chartContainer" style="display: none;">
+                                            <div class="chart-pane-title">Price &amp; Moving Averages</div>
+                                            <div id="priceChartPane" class="chart-pane" style="height: 320px;"></div>
+                                            <div class="chart-pane-legend">
+                                                <span><span class="swatch" style="background:#0f766e;"></span>Close</span>
+                                                <span><span class="swatch" style="background:#c2410c;"></span>30-Day MA</span>
+                                                <span><span class="swatch" style="background:#0891b2;"></span>90-Day MA</span>
+                                                <span><span class="swatch" style="background:#2f855a;"></span>Buy signal</span>
+                                                <span><span class="swatch" style="background:#9c4221;"></span>Sell signal</span>
+                                            </div>
+
+                                            <div class="chart-pane-title">Stochastic Oscillator</div>
+                                            <div id="stochasticChartPane" class="chart-pane" style="height: 160px;"></div>
+                                            <div class="chart-pane-legend">
+                                                <span><span class="swatch" style="background:#7c3aed;"></span>%K</span>
+                                                <span><span class="swatch" style="background:#d97706;"></span>%D</span>
+                                                <span>Dashed lines: overbought (70) / oversold (30)</span>
+                                            </div>
+
+                                            <div class="chart-pane-title">MACD</div>
+                                            <div id="macdChartPane" class="chart-pane" style="height: 160px;"></div>
+                                            <div class="chart-pane-legend">
+                                                <span><span class="swatch" style="background:#0f766e;"></span>MACD</span>
+                                                <span><span class="swatch" style="background:#c2410c;"></span>Signal Line</span>
+                                            </div>
+                                        </div>
+                                        <div id="chartUnavailable" style="display: none;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-4" id="putOptionsCard" style="display: none;">
+                            <div class="col-12">
+                                <div class="metric-card analysis-section">
+                                    <div class="scorecard-header">
+                                        <div>
+                                            <h4><i class="fas fa-hand-holding-dollar"></i> Cash-Secured Put Candidates</h4>
+                                            <p class="section-caption">Liquid, near-the-money puts you could sell to open - premium collected now, strike is your entry price if assigned. Premium uses the live bid when there is one, otherwise the last trade price. Premium, breakeven, and yield below are net of a $1.00 IBKR Pro Fixed/Lite commission (1 contract); non-USD contracts show gross premium since that fee schedule doesn't apply.</p>
+                                        </div>
+                                        <button class="btn btn-outline-secondary btn-sm" id="togglePutOptionsBtn" onclick="togglePutOptionsVisibility()">
+                                            <i class="fas fa-eye-slash"></i> Hide
+                                        </button>
+                                    </div>
+                                    <div id="putOptionsContent" class="mt-3"></div>
+                                </div>
+                            </div>
+                        </div>
+                        </div>
+                    </div> <!-- /.content-wrapper -->
+                    </div>
+                <!-- /Watchlist Tab -->
+
+                <!-- Holdings Tab -->
+                <div class="tab-pane" id="holdings-pane" role="tabpanel" aria-labelledby="holdings-tab" tabindex="0">
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="metric-card management-shell">
+                                <div class="section-title-row">
+                                    <div>
+                                        <h5><i class="fas fa-briefcase"></i> Your Holdings</h5>
+                                        <p class="section-caption">Track what you actually own - shares, cost basis, live value, and unrealized P&amp;L. Separate from the Watchlist above.</p>
+                                    </div>
+                                    <span class="info-chip"><i class="fas fa-wallet"></i> Live position tracking</span>
+                                </div>
+
+                                <div class="management-toolbar">
+                                    <div class="management-action-card">
+                                        <div class="hero-kicker mb-2">Add or Top Up a Position</div>
+                                        <h6 class="mb-2">Record shares you own</h6>
+                                        <p class="section-caption">Adding more shares of a symbol you already hold recalculates your average cost automatically.</p>
+                                        <div class="management-action-row" style="flex-wrap: wrap;">
+                                            <input type="text" class="form-control" id="holdingSymbol" placeholder="Symbol (e.g., AAPL)" style="text-transform: uppercase; flex: 1 1 140px;">
+                                            <input type="number" class="form-control" id="holdingShares" placeholder="Shares" min="0" step="any" style="flex: 1 1 110px;">
+                                            <input type="number" class="form-control" id="holdingCostBasis" placeholder="Cost / share" min="0" step="any" style="flex: 1 1 130px;">
+                                            <input type="date" class="form-control" id="holdingPurchaseDate" style="flex: 1 1 160px;">
+                                        </div>
+                                        <div class="management-action-row">
+                                            <button class="btn btn-success" id="addHoldingBtn" onclick="addHolding()">
+                                                <i class="fas fa-plus"></i> Add Holding
+                                            </button>
+                                        </div>
+                                        <div id="holdingsActionFeedback" class="management-inline-status"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="metric-card">
+                                <div class="section-title-row">
+                                    <div>
+                                        <h5><i class="fas fa-list"></i> Current Positions</h5>
+                                        <p class="section-caption">Live value and unrealized P&amp;L, refreshed each time you open this tab.</p>
+                                    </div>
+                                    <button class="btn btn-outline-primary btn-sm" onclick="loadHoldings()">
+                                        <i class="fas fa-sync"></i> Refresh
                                     </button>
                                 </div>
-                                <div id="portfolioActionFeedback" class="management-inline-status"></div>
+                                <div id="holdingsContent">
+                                    <p class="text-muted">Open this tab to load your holdings.</p>
+                                </div>
                             </div>
+                        </div>
+                    </div>
 
-                            <div class="management-action-card">
-                                <div class="hero-kicker mb-2">Remove Holdings</div>
-                                <h6 class="mb-2">Remove a stock from the tracked portfolio</h6>
-                                <p class="section-caption">This updates the saved portfolio list and clears the symbol from the app dropdowns.</p>
-                                <div class="management-action-row">
-                                    <select class="form-select" id="removeStock">
-                                        <option value="">Select stock to remove...</option>
-                                        {% for stock in stocks %}
-                                        <option value="{{ stock.symbol }}">{{ stock.symbol }} - {{ stock.name }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <button class="btn btn-danger" id="removeStockBtn" onclick="removeStock()">
-                                        <i class="fas fa-trash"></i> Remove
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <div class="metric-card">
+                                <div class="section-title-row">
+                                    <div>
+                                        <h5><i class="fas fa-chart-line"></i> Performance vs. Benchmark</h5>
+                                        <p class="section-caption">Portfolio value since each position's purchase date, compared to the same dollars invested in a benchmark on the same dates.</p>
+                                    </div>
+                                </div>
+                                <div class="management-action-row" style="flex-wrap: wrap;">
+                                    <input type="text" class="form-control" id="performanceBenchmark" placeholder="Benchmark symbol" value="SPY" style="text-transform: uppercase; flex: 1 1 160px; max-width: 220px;">
+                                    <button class="btn btn-outline-primary" id="loadPerformanceBtn" onclick="loadHoldingsPerformance()">
+                                        <i class="fas fa-sync"></i> Update
                                     </button>
                                 </div>
+                                <div id="performanceSummary" class="mt-2"></div>
+                                <div id="performanceChartPane" class="chart-pane mt-3" style="height: 260px; display: none;"></div>
+                                <div class="chart-pane-legend" id="performanceLegend" style="display: none;">
+                                    <span><span class="swatch" style="background:#0f766e;"></span>Your Holdings</span>
+                                    <span><span class="swatch" style="background:#c2410c;"></span><span id="performanceBenchmarkLegendLabel">Benchmark</span></span>
+                                </div>
                             </div>
-                        </div>
-
-                        <div class="management-footnote">
-                            <small class="text-muted">
-                                <strong>Tip:</strong> Adding or removing a symbol updates both the analysis selector and the removal dropdown immediately.
-                            </small>
                         </div>
                     </div>
                 </div>
-            </div>
+                <!-- /Holdings Tab -->
 
-            <!-- Benchmark Management Panel (Hidden by default) -->
-            <div class="row mb-4" id="benchmarkManagement" style="display: none;">
-                <div class="col-md-12">
-                    <div class="metric-card benchmark-shell">
-                        <div class="section-title-row">
-                            <div>
-                                <h5><i class="fas fa-database"></i> Sector Benchmark Management</h5>
-                                <p class="section-caption">Refresh peer medians, inspect file health, and review the benchmark history the scoring model depends on.</p>
+                <!-- Benchmarks Tab -->
+                <div class="tab-pane" id="benchmarks-pane" role="tabpanel" aria-labelledby="benchmarks-tab" tabindex="0">
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="metric-card benchmark-shell">
+                                <div class="section-title-row">
+                                    <div>
+                                        <h5><i class="fas fa-database"></i> Sector Benchmark Management</h5>
+                                        <p class="section-caption">Refresh peer medians, inspect file health, and review the benchmark history the scoring model depends on.</p>
+                                    </div>
+                                    <span class="info-chip"><i class="fas fa-shield-alt"></i> Cached benchmark layer</span>
+                                </div>
+
+                                <div class="benchmark-toolbar">
+                                    <div class="benchmark-action-card">
+                                        <div class="hero-kicker mb-2">Benchmark Actions</div>
+                                        <h6 class="mb-2">Refresh or inspect the benchmark store</h6>
+                                        <p class="section-caption">Run the sector refresh when you want current peer medians, then inspect the saved file and history below.</p>
+                                        <div class="benchmark-action-row">
+                                            <button class="btn btn-primary" onclick="refreshBenchmarks()">
+                                                <i class="fas fa-calculator"></i> Calculate & Save Benchmarks
+                                            </button>
+                                            <button class="btn btn-info" onclick="getBenchmarkStatus()">
+                                                <i class="fas fa-info-circle"></i> Check Status
+                                            </button>
+                                        </div>
+                                        <div id="benchmarkActionFeedback" class="benchmark-inline-status"></div>
+                                    </div>
+                                    <div class="benchmark-note">
+                                        <small>
+                                            <strong>Note:</strong> This process analyzes 110 stocks across 11 sectors and usually takes 2-3 minutes. You only need to run it occasionally unless you want fresher sector medians.
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div id="benchmarkStatus" class="benchmark-status-shell" style="display: none;">
+                                    <div class="section-title-row">
+                                        <div>
+                                            <h6>Benchmark Status</h6>
+                                            <p class="section-caption">File health, calculation metadata, and recent refresh history.</p>
+                                        </div>
+                                    </div>
+                                    <div id="benchmarkStatusContent"></div>
+                                </div>
+
+                                <div class="benchmark-footnote">
+                                    <small class="text-muted">
+                                        <strong>How it works:</strong> The system fetches data for 10 representative stocks per sector,
+                                        calculates the median for P/E, P/B, P/S, ROE, and Profit Margin,
+                                        then saves the results to <code>sector_benchmarks.json</code> for fast access.
+                                        Stocks are scored based on how much better/worse they are compared to their sector median.
+                                    </small>
+                                </div>
                             </div>
-                            <span class="info-chip"><i class="fas fa-shield-alt"></i> Cached benchmark layer</span>
                         </div>
+                    </div>
+                </div>
+                <!-- /Benchmarks Tab -->
 
-                        <div class="benchmark-toolbar">
-                            <div class="benchmark-action-card">
-                                <div class="hero-kicker mb-2">Benchmark Actions</div>
-                                <h6 class="mb-2">Refresh or inspect the benchmark store</h6>
-                                <p class="section-caption">Run the sector refresh when you want current peer medians, then inspect the saved file and history below.</p>
-                                <div class="benchmark-action-row">
-                                    <button class="btn btn-primary" onclick="refreshBenchmarks()">
-                                        <i class="fas fa-calculator"></i> Calculate & Save Benchmarks
+                <!-- Backtesting Tab -->
+                <div class="tab-pane" id="backtesting-pane" role="tabpanel" aria-labelledby="backtesting-tab" tabindex="0">
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="metric-card management-shell">
+                                <div class="section-title-row">
+                                    <div>
+                                        <h5><i class="fas fa-flask"></i> Run a Backtest</h5>
+                                        <p class="section-caption">Replay the recommendation scorecard across history and check whether its labels line up with what actually happened next. Runs on demand - results are cached below for later review.</p>
+                                    </div>
+                                    <span class="info-chip"><i class="fas fa-shield-alt"></i> Point-in-time SEC data</span>
+                                </div>
+
+                                <div class="management-toolbar">
+                                    <div class="management-action-card">
+                                        <div class="hero-kicker mb-2">Backtest Parameters</div>
+                                        <h6 class="mb-2">Choose a symbol and window</h6>
+                                        <p class="section-caption">Uses SEC EDGAR filings as they existed at each historical date, not what's known today - see the note below.</p>
+                                        <div class="management-action-row" style="flex-wrap: wrap;">
+                                            <input type="text" class="form-control" id="backtestSymbol" placeholder="Symbol (e.g., AAPL)" style="text-transform: uppercase; flex: 1 1 130px;">
+                                            <input type="date" class="form-control" id="backtestStartDate" style="flex: 1 1 150px;">
+                                            <input type="date" class="form-control" id="backtestEndDate" style="flex: 1 1 150px;">
+                                        </div>
+                                        <div class="management-action-row" style="flex-wrap: wrap;">
+                                            <select class="form-select" id="backtestProfile" style="flex: 1 1 140px;">
+                                                <option value="balanced">Balanced</option>
+                                                <option value="growth">Growth</option>
+                                                <option value="value">Value</option>
+                                                <option value="momentum">Momentum</option>
+                                            </select>
+                                            <input type="number" class="form-control" id="backtestHoldingPeriod" placeholder="Holding period (days)" value="20" min="1" style="flex: 1 1 180px;">
+                                            <input type="number" class="form-control" id="backtestStepDays" placeholder="Step (trading days)" value="5" min="1" style="flex: 1 1 170px;">
+                                        </div>
+                                        <div class="management-action-row">
+                                            <button class="btn btn-primary" id="runBacktestBtn" onclick="runBacktest()">
+                                                <i class="fas fa-play"></i> Run Backtest
+                                            </button>
+                                        </div>
+                                        <div id="backtestActionFeedback" class="management-inline-status"></div>
+                                    </div>
+                                </div>
+
+                                <div class="management-footnote">
+                                    <small class="text-muted">
+                                        <strong>Known limitation:</strong> sector benchmark medians (P/E, P/B, etc.) always use today's <code>sector_benchmarks.json</code> for every historical evaluation date, not a historical snapshot - no historical benchmark store exists yet. Technical signals and EDGAR-sourced fundamentals are genuinely point-in-time; sector comparison is an approximation that drifts further from accurate the older the backtest window.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="metric-card">
+                                <div class="section-title-row">
+                                    <div>
+                                        <h5><i class="fas fa-history"></i> Past Runs</h5>
+                                        <p class="section-caption">Select a run to see its label performance and equity curve.</p>
+                                    </div>
+                                    <button class="btn btn-outline-primary btn-sm" onclick="loadBacktestResults()">
+                                        <i class="fas fa-sync"></i> Refresh
                                     </button>
-                                    <button class="btn btn-info" onclick="getBenchmarkStatus()">
-                                        <i class="fas fa-info-circle"></i> Check Status
-                                    </button>
                                 </div>
-                                <div id="benchmarkActionFeedback" class="benchmark-inline-status"></div>
-                            </div>
-                            <div class="benchmark-note">
-                                <small>
-                                    <strong>Note:</strong> This process analyzes 110 stocks across 11 sectors and usually takes 2-3 minutes. You only need to run it occasionally unless you want fresher sector medians.
-                                </small>
-                            </div>
-                        </div>
-                        
-                        <div id="benchmarkStatus" class="benchmark-status-shell" style="display: none;">
-                            <div class="section-title-row">
-                                <div>
-                                    <h6>Benchmark Status</h6>
-                                    <p class="section-caption">File health, calculation metadata, and recent refresh history.</p>
+                                <div id="backtestResultsList">
+                                    <p class="text-muted">Open this tab to load past runs.</p>
                                 </div>
                             </div>
-                            <div id="benchmarkStatusContent"></div>
-                        </div>
-                        
-                        <div class="benchmark-footnote">
-                            <small class="text-muted">
-                                <strong>How it works:</strong> The system fetches data for 10 representative stocks per sector, 
-                                calculates the median for P/E, P/B, P/S, ROE, and Profit Margin, 
-                                then saves the results to <code>sector_benchmarks.json</code> for fast access.
-                                Stocks are scored based on how much better/worse they are compared to their sector median.
-                            </small>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- Loading Spinner -->
-            <div id="loadingSpinner" class="loading" style="display: none;">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <p class="mt-3">Fetching stock data...</p>
-            </div>
-
-            <!-- Stock Analysis Container -->
-            <div id="stockAnalysis" style="display: none;">
-            <div class="content-wrapper">
-                <!-- Stock Header -->
-                <div class="row mb-4">
-                    <div class="col-12">
-                        <div class="stock-hero-card">
-                            <div>
-                                <div class="hero-kicker">Live Analysis</div>
-                                <h2 id="stockTitle" class="mb-0"></h2>
-                                <p id="stockInfo" class="text-muted mb-0"></p>
-                                <div class="stock-hero-meta">
-                                    <span class="info-chip"><i class="fas fa-layer-group"></i><span id="stockSectorChip">Sector view</span></span>
-                                    <span class="info-chip"><i class="fas fa-clock"></i><span id="lastUpdated">Waiting for data</span></span>
+                    <div class="row" id="backtestDetailRow" style="display: none;">
+                        <div class="col-md-12">
+                            <div class="metric-card">
+                                <div class="section-title-row">
+                                    <div>
+                                        <h5><i class="fas fa-chart-line"></i> Run Detail</h5>
+                                        <p id="backtestDetailCaption" class="section-caption"></p>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="text-md-end">
-                                <div id="overallRecommendation"></div>
-                                <p class="section-caption mb-0">Fundamentals + momentum</p>
+                                <div id="backtestLabelPerformance"></div>
+
+                                <div class="chart-pane-title">Equity Curve - Follow Signal vs Buy &amp; Hold</div>
+                                <div id="backtestEquityChartPane" class="chart-pane" style="height: 260px;"></div>
+                                <div class="chart-pane-legend">
+                                    <span><span class="swatch" style="background:#0f766e;"></span>Follow Signal</span>
+                                    <span><span class="swatch" style="background:#c2410c;"></span>Buy &amp; Hold</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <div id="fetchStatusBanner" style="display: none;"></div>
-
-                <div class="row mb-4">
-                    <div class="col-12">
-                        <div class="metric-card analysis-section">
-                            <div class="scorecard-header">
-                                <div>
-                                    <h4><i class="fas fa-sliders-h"></i> Recommendation Scorecard</h4>
-                                    <p class="section-caption">What is driving the recommendation</p>
-                                </div>
-                                <div id="scorecardProfileSummary" class="scorecard-profile">Profile: Balanced</div>
-                            </div>
-                            <div id="recommendationScorecard" class="scorecard-grid mt-3"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Fundamental Analysis Section -->
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="metric-card">
-                            <div class="section-title-row">
-                                <div>
-                                    <h3><i class="fas fa-calculator"></i> Fundamental Analysis</h3>
-                                    <p class="section-caption">Valuation, profitability, leverage, and growth</p>
-                                </div>
-                            </div>
-                            
-                            <!-- Key Metrics Grid -->
-                            <div class="metric-grid" id="fundamentalMetrics">
-                                <!-- Metrics will be populated by JavaScript -->
-                            </div>
-                        </div>
-                        <!-- Fundamental Details placed under the main Fundamental Analysis column -->
-                        <div class="metric-card analysis-section mt-3">
-                            <div class="section-title-row">
-                                <div>
-                                    <h4><i class="fas fa-info-circle"></i> Fundamental Details</h4>
-                                    <p class="section-caption">Sector, growth, and financial health breakdown</p>
-                                </div>
-                            </div>
-
-                            <!-- Sector Comparison Section -->
-                            <div class="mt-3" id="sectorComparison" style="display: none;">
-                                <h6><i class="fas fa-balance-scale"></i> Sector Comparison</h6>
-                                <div id="sectorComparisonContent"></div>
-                            </div>
-
-                            <!-- Growth Analysis Section -->
-                            <div class="mt-3" id="growthAnalysis" style="display: none;">
-                                <h6><i class="fas fa-trending-up"></i> Growth Analysis</h6>
-                                <div id="growthAnalysisContent"></div>
-                            </div>
-
-                            <!-- Financial Health Section -->
-                            <div class="mt-3" id="financialHealth" style="display: none;">
-                                <h6><i class="fas fa-heartbeat"></i> Financial Health</h6>
-                                <div id="financialHealthContent"></div>
-                            </div>
-
-                            <div id="fundamentalAnalysis" class="mt-3"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Technical Analysis Charts -->
-                <div class="row mt-4">
-                    <div class="col-12">
-                        <div class="chart-container">
-                            <div class="tech-header">
-                                <div>
-                                    <h3 class="mb-0"><i class="fas fa-chart-area"></i> Technical Analysis & Momentum Indicators</h3>
-                                    <p class="section-caption mb-0">Trend, stochastic, and MACD</p>
-                                </div>
-                                <div id="technicalRecommendation" class="tech-recommendation"></div>
-                            </div>
-                            <div class="chart-frame">
-                                <div id="loadingChart" class="loading" style="display: none;">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading chart...</span>
-                                </div>
-                                <p class="mt-3">Generating technical analysis charts...</p>
-                                </div>
-                                <div id="chartContainer"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                </div>
-            </div> <!-- /.content-wrapper -->
+                <!-- /Backtesting Tab -->
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
     <script>
         function renderInlineMessage(target, variant, message) {
             target.innerHTML = `<div class="alert alert-${variant} mb-0">${message}</div>`;
@@ -1089,6 +1418,33 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Tab switching (hand-rolled: Bootstrap 5.1.3's own Tab component
+            // fails to deactivate the previous pane in some environments,
+            // leaving two panes marked active at once).
+            document.querySelectorAll('#mainTabs .nav-link').forEach(function(tabButton) {
+                tabButton.addEventListener('click', function() {
+                    document.querySelectorAll('#mainTabs .nav-link').forEach(function(btn) {
+                        btn.classList.remove('active');
+                        btn.setAttribute('aria-selected', 'false');
+                    });
+                    document.querySelectorAll('#mainTabsContent .tab-pane').forEach(function(pane) {
+                        pane.classList.remove('active', 'show');
+                    });
+
+                    tabButton.classList.add('active');
+                    tabButton.setAttribute('aria-selected', 'true');
+                    const targetPane = document.querySelector(tabButton.dataset.tabTarget);
+                    targetPane.classList.add('active', 'show');
+
+                    if (tabButton.id === 'holdings-tab') {
+                        loadHoldings();
+                        loadHoldingsPerformance();
+                    } else if (tabButton.id === 'backtesting-tab') {
+                        loadBacktestResults();
+                    }
+                });
+            });
+
             const stockSelect = document.getElementById('stockSelect');
             const scoringProfileSelect = document.getElementById('scoringProfileSelect');
             const loadingSpinner = document.getElementById('loadingSpinner');
@@ -1125,14 +1481,19 @@
                 document.getElementById('financialHealthContent').innerHTML = '';
                 document.getElementById('fetchStatusBanner').style.display = 'none';
                 document.getElementById('fetchStatusBanner').innerHTML = '';
+                document.getElementById('putOptionsCard').style.display = 'none';
+                document.getElementById('putOptionsContent').innerHTML = '';
                 document.getElementById('lastUpdated').textContent = '';
                 document.getElementById('stockTitle').textContent = '';
                 document.getElementById('stockInfo').textContent = '';
+                document.getElementById('earningsChip').style.display = 'none';
                 scorecardProfileSummary.textContent = `Profile: ${formatProfileLabel(scoringProfileSelect.value)}`;
                 document.getElementById('sectorComparison').style.display = 'none';
                 document.getElementById('growthAnalysis').style.display = 'none';
                 document.getElementById('financialHealth').style.display = 'none';
-                chartContainer.innerHTML = '';
+                chartContainer.style.display = 'none';
+                document.getElementById('chartUnavailable').style.display = 'none';
+                document.getElementById('chartUnavailable').innerHTML = '';
             }
 
             function formatProfileLabel(profileKey) {
@@ -1153,6 +1514,7 @@
                     .then(data => {
                         displayStockData(data);
                         loadChart(stock);
+                        loadEarnings(stock);
                         loadingSpinner.style.display = 'none';
                         stockAnalysis.style.display = 'block';
                     })
@@ -1161,27 +1523,182 @@
                         loadingSpinner.style.display = 'none';
                         stockAnalysis.style.display = 'block';
                         renderInlineMessage(document.getElementById('fundamentalMetrics'), 'danger', error.message);
-                        renderInlineMessage(chartContainer, 'secondary', 'Chart unavailable until stock data loads successfully.');
+                        const chartUnavailable = document.getElementById('chartUnavailable');
+                        renderInlineMessage(chartUnavailable, 'secondary', 'Chart unavailable until stock data loads successfully.');
+                        chartUnavailable.style.display = 'block';
                     });
+            }
+
+            function loadEarnings(stock) {
+                // Non-blocking: this must never hold up or break the main analysis view.
+                const chip = document.getElementById('earningsChip');
+                const chipText = document.getElementById('earningsChipText');
+                chip.style.display = 'none';
+
+                fetchJson(`/api/stock/${stock}/earnings`)
+                    .then(data => {
+                        if (!data.next_earnings_date || data.days_until === null) {
+                            return;
+                        }
+
+                        const formattedDate = new Date(data.next_earnings_date + 'T00:00:00')
+                            .toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+                        let label;
+                        if (data.days_until < 0) {
+                            label = `Last earnings ${formattedDate}`;
+                        } else if (data.days_until === 0) {
+                            label = `Earnings today (${formattedDate})`;
+                        } else {
+                            label = `Earnings in ${data.days_until}d (${formattedDate})`;
+                        }
+
+                        chipText.textContent = label;
+                        chip.style.display = 'inline-flex';
+                    })
+                    .catch(error => {
+                        console.error('Error loading earnings calendar:', error);
+                    });
+            }
+
+            // Interactive charts (Lightweight Charts). Instances are created once
+            // and reused across symbol changes via setData() - recreating them on
+            // every load would leak chart instances and detached canvases.
+            let priceChart, priceSeries, ma30Series, ma90Series;
+            let stochasticChart, stochKSeries, stochDSeries;
+            let macdChart, macdSeries, macdSignalSeries;
+            let chartsInitialized = false;
+
+            function createCharts() {
+                const commonOptions = {
+                    layout: {
+                        textColor: '#5e6e77',
+                        background: { type: 'solid', color: '#ffffff' },
+                    },
+                    grid: {
+                        vertLines: { color: 'rgba(17, 33, 45, 0.06)' },
+                        horzLines: { color: 'rgba(17, 33, 45, 0.06)' },
+                    },
+                    timeScale: { borderColor: 'rgba(17, 33, 45, 0.1)' },
+                    rightPriceScale: { borderColor: 'rgba(17, 33, 45, 0.1)' },
+                    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                    autoSize: true,
+                };
+
+                priceChart = LightweightCharts.createChart(document.getElementById('priceChartPane'), commonOptions);
+                priceSeries = priceChart.addCandlestickSeries({
+                    upColor: '#2f855a', downColor: '#9c4221', borderVisible: false,
+                    wickUpColor: '#2f855a', wickDownColor: '#9c4221',
+                });
+                ma30Series = priceChart.addLineSeries({ color: '#c2410c', lineWidth: 2, priceLineVisible: false });
+                ma90Series = priceChart.addLineSeries({ color: '#0891b2', lineWidth: 1, priceLineVisible: false });
+
+                stochasticChart = LightweightCharts.createChart(document.getElementById('stochasticChartPane'), commonOptions);
+                stochKSeries = stochasticChart.addLineSeries({ color: '#7c3aed', lineWidth: 1.5, priceLineVisible: false });
+                stochDSeries = stochasticChart.addLineSeries({ color: '#d97706', lineWidth: 1.5, priceLineVisible: false });
+                stochKSeries.createPriceLine({
+                    price: 70, color: 'rgba(194, 65, 12, 0.6)', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'Overbought',
+                });
+                stochKSeries.createPriceLine({
+                    price: 30, color: 'rgba(47, 133, 90, 0.6)', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'Oversold',
+                });
+
+                macdChart = LightweightCharts.createChart(document.getElementById('macdChartPane'), commonOptions);
+                macdSeries = macdChart.addLineSeries({ color: '#0f766e', lineWidth: 2, priceLineVisible: false });
+                macdSignalSeries = macdChart.addLineSeries({ color: '#c2410c', lineWidth: 2, priceLineVisible: false });
+                macdSeries.createPriceLine({
+                    price: 0, color: 'rgba(17, 33, 45, 0.35)', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: false, title: '',
+                });
+
+                // Keep the three panes' visible time range in sync so panning or
+                // zooming one moves the others together.
+                const panes = [priceChart, stochasticChart, macdChart];
+                panes.forEach(chart => {
+                    chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+                        if (!range) {
+                            return;
+                        }
+                        panes.forEach(other => {
+                            if (other !== chart) {
+                                other.timeScale().setVisibleLogicalRange(range);
+                            }
+                        });
+                    });
+                });
+
+                chartsInitialized = true;
+            }
+
+            function toLinePoints(dates, values) {
+                if (!values) {
+                    return [];
+                }
+                return dates
+                    .map((d, i) => ({ time: d, value: values[i] }))
+                    .filter(point => point.value !== null && point.value !== undefined);
+            }
+
+            function updateChartsWithData(data) {
+                const candles = data.dates.map((d, i) => ({
+                    time: d, open: data.open[i], high: data.high[i], low: data.low[i], close: data.close[i],
+                }));
+                priceSeries.setData(candles);
+                ma30Series.setData(toLinePoints(data.dates, data.ma_30));
+                ma90Series.setData(toLinePoints(data.dates, data.ma_90));
+                stochKSeries.setData(toLinePoints(data.dates, data.stochastic_k));
+                stochDSeries.setData(toLinePoints(data.dates, data.stochastic_d));
+                macdSeries.setData(toLinePoints(data.dates, data.macd));
+                macdSignalSeries.setData(toLinePoints(data.dates, data.macd_signal));
+
+                const markers = [];
+                data.dates.forEach((d, i) => {
+                    if (data.buy_signal && data.buy_signal[i]) {
+                        markers.push({ time: d, position: 'belowBar', color: '#2f855a', shape: 'arrowUp', text: 'BUY' });
+                    }
+                    if (data.sell_signal && data.sell_signal[i]) {
+                        markers.push({ time: d, position: 'aboveBar', color: '#9c4221', shape: 'arrowDown', text: 'SELL' });
+                    }
+                });
+                priceSeries.setMarkers(markers);
+
+                priceChart.timeScale().fitContent();
+                stochasticChart.timeScale().fitContent();
+                macdChart.timeScale().fitContent();
             }
 
             function loadChart(stock) {
                 loadingChart.style.display = 'block';
-                chartContainer.innerHTML = '';
+                chartContainer.style.display = 'none';
+                const chartUnavailable = document.getElementById('chartUnavailable');
+                chartUnavailable.style.display = 'none';
+                chartUnavailable.innerHTML = '';
 
-                fetchJson(`/api/chart/${stock}`)
+                fetchJson(`/api/chart-data/${stock}`)
                     .then(data => {
                         loadingChart.style.display = 'none';
-                        const img = document.createElement('img');
-                        img.src = `data:image/png;base64,${data.chart}`;
-                        img.style.width = '100%';
-                        img.style.height = 'auto';
-                        chartContainer.appendChild(img);
+
+                        if (!data.dates || !data.dates.length) {
+                            renderInlineMessage(chartUnavailable, 'warning', 'No chart data available for this symbol.');
+                            chartUnavailable.style.display = 'block';
+                            return;
+                        }
+
+                        // Show the container before creating/updating charts so
+                        // panes have real dimensions for Lightweight Charts' autoSize.
+                        chartContainer.style.display = 'block';
+                        if (!chartsInitialized) {
+                            createCharts();
+                        }
+                        updateChartsWithData(data);
                     })
                     .catch(error => {
-                        console.error('Error:', error);
+                        console.error('Error loading chart:', error);
                         loadingChart.style.display = 'none';
-                        renderInlineMessage(chartContainer, 'warning', error.message);
+                        renderInlineMessage(chartUnavailable, 'warning', error.message);
+                        chartUnavailable.style.display = 'block';
                     });
             }
 
@@ -1205,6 +1722,13 @@
                 overallRec.innerHTML = `<span class="recommendation-badge ${getRecommendationClass(data.overall_recommendation)}">${data.overall_recommendation}</span>`;
                 updateFetchStatusBanner(data.fetch_status);
                 updateRecommendationScorecard(data.recommendation_scorecard);
+
+                if (data.overall_recommendation === 'BUY' || data.overall_recommendation === 'STRONG BUY') {
+                    document.getElementById('putOptionsCard').style.display = 'block';
+                    loadPutOptions(data.symbol);
+                } else {
+                    document.getElementById('putOptionsCard').style.display = 'none';
+                }
 
                 // Update fundamental metrics
                 const metricsContainer = document.getElementById('fundamentalMetrics');
@@ -1277,6 +1801,56 @@
                     case 'STRONG SELL': return 'strong-sell';
                     default: return 'hold';
                 }
+            }
+
+            function loadPutOptions(symbol) {
+                const container = document.getElementById('putOptionsContent');
+                container.innerHTML = '<p class="text-muted"><i class="fas fa-spinner fa-spin"></i> Checking option chain...</p>';
+
+                fetchJson(`/api/stock/${symbol}/options`)
+                    .then(data => {
+                        if (!data.candidates.length) {
+                            container.innerHTML = '<p class="text-muted mb-0">No liquid near-the-money puts found.</p>';
+                            return;
+                        }
+
+                        let html = '<div class="table-shell table-responsive"><table class="table table-sm">';
+                        html += '<thead><tr><th>Expiration</th><th>Days</th><th>Strike</th><th>Premium</th>' +
+                                '<th>Last Price</th><th>Breakeven</th><th>Ann. Yield</th><th>Open Interest</th></tr></thead><tbody>';
+
+                        data.candidates.forEach(c => {
+                            const tags = [];
+                            if (c.premium_source !== 'bid') {
+                                tags.push('last trade');
+                            }
+                            if (!c.commission_applicable) {
+                                tags.push('gross, no commission modeled');
+                            }
+                            const tagHtml = tags.length
+                                ? ` <span class="text-muted" style="font-size: 11px;">(${tags.join(', ')})</span>`
+                                : '';
+                            const premiumLabel = `${formatMoney(c.premium)}${tagHtml}`;
+                            html += `
+                                <tr>
+                                    <td>${c.expiration}</td>
+                                    <td>${c.days_to_expiry}</td>
+                                    <td>${formatMoney(c.strike)}</td>
+                                    <td>${premiumLabel}</td>
+                                    <td>${formatMoney(c.last_price)}</td>
+                                    <td>${formatMoney(c.breakeven)}</td>
+                                    <td>${c.annualized_yield_pct !== null ? c.annualized_yield_pct + '%' : 'N/A'}</td>
+                                    <td>${c.open_interest}</td>
+                                </tr>
+                            `;
+                        });
+
+                        html += '</tbody></table></div>';
+                        container.innerHTML = html;
+                    })
+                    .catch(error => {
+                        console.error('Error loading put options:', error);
+                        renderInlineMessage(container, 'danger', error.message);
+                    });
             }
 
             // Functions to update the new analysis sections
@@ -1491,6 +2065,11 @@
                     case 'POOR': return 'score-poor';
                     default: return 'score-average';                }
             }
+
+            // Watchlist is the default-active tab (unlike Holdings/Backtesting,
+            // which only fetch when their tab is opened), so check for rating
+            // changes once on initial load rather than on every tab-switch.
+            checkWatchlistChanges();
         });        // Portfolio Management Functions
         window.togglePortfolioManagement = function() {
             const portfolioSection = document.getElementById('portfolioManagement');
@@ -1505,6 +2084,58 @@
                 toggleBtn.innerHTML = '<i class="fas fa-cog"></i> Manage Portfolio';
                 toggleBtn.className = 'btn btn-outline-primary mr-2';
             }
+        };
+
+        window.togglePutOptionsVisibility = function() {
+            const content = document.getElementById('putOptionsContent');
+            const toggleBtn = document.getElementById('togglePutOptionsBtn');
+
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i> Hide';
+            } else {
+                content.style.display = 'none';
+                toggleBtn.innerHTML = '<i class="fas fa-eye"></i> Show';
+            }
+        };
+
+        window.checkWatchlistChanges = function() {
+            const banner = document.getElementById('watchlistChangesBanner');
+            const btn = document.getElementById('checkChangesBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+
+            fetchJson('/api/portfolio/changes')
+                .then(data => {
+                    if (!data.checked.length) {
+                        banner.innerHTML = '';
+                        return;
+                    }
+
+                    if (!data.changes.length) {
+                        banner.innerHTML = `<div class="alert alert-secondary mb-0">Checked ${data.checked.length} stock${data.checked.length === 1 ? '' : 's'} - no rating changes.</div>`;
+                        return;
+                    }
+
+                    const items = data.changes.map(change => `
+                        <div class="d-flex align-items-center gap-2" style="margin-bottom: 6px;">
+                            <strong>${change.symbol}</strong>
+                            <span class="recommendation-badge ${getHoldingRatingClass(change.previous_label)}" style="font-size: 12px; padding: 4px 10px;">${change.previous_label}</span>
+                            <i class="fas fa-arrow-right"></i>
+                            <span class="recommendation-badge ${getHoldingRatingClass(change.new_label)}" style="font-size: 12px; padding: 4px 10px;">${change.new_label}</span>
+                            <span class="text-muted" style="font-size: 12px;">(was ${change.previous_label} ${change.days_since_previous_reading}d ago)</span>
+                        </div>
+                    `).join('');
+                    banner.innerHTML = `<div class="alert alert-info mb-0"><strong>Rating changes:</strong><div class="mt-2">${items}</div></div>`;
+                })
+                .catch(error => {
+                    console.error('Error checking watchlist changes:', error);
+                    banner.innerHTML = `<div class="alert alert-danger mb-0">${error.message}</div>`;
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-bell"></i> Check for Changes';
+                });
         };
 
         window.reloadPortfolioDropdowns = function() {
@@ -1605,22 +2236,417 @@
             });
         };
 
-        // Benchmark Management Functions
-        window.toggleBenchmarkManagement = function() {
-            const panel = document.getElementById('benchmarkManagement');
-            const toggleBtn = document.querySelector('button[onclick="toggleBenchmarkManagement()"]');
-            
-            if (panel.style.display === 'none' || panel.style.display === '') {
-                panel.style.display = 'block';
-                toggleBtn.innerHTML = '<i class="fas fa-times"></i> Close Benchmarks';
-                toggleBtn.className = 'btn btn-outline-danger';
-            } else {
-                panel.style.display = 'none';
-                toggleBtn.innerHTML = '<i class="fas fa-database"></i> Manage Sector Benchmarks';
-                toggleBtn.className = 'btn btn-outline-primary';
+        // Holdings Functions
+        function setHoldingsFeedback(variant, message) {
+            const feedback = document.getElementById('holdingsActionFeedback');
+            if (!feedback) {
+                return;
             }
+            feedback.innerHTML = message ? `<div class="alert alert-${variant} mb-0">${message}</div>` : '';
+        }
+
+        function getHoldingRatingClass(rating) {
+            switch (rating) {
+                case 'STRONG BUY': return 'strong-buy';
+                case 'BUY': return 'buy';
+                case 'HOLD': return 'hold';
+                case 'SELL': return 'sell';
+                case 'STRONG SELL': return 'strong-sell';
+                default: return 'hold';
+            }
+        }
+
+        function formatMoney(value) {
+            if (value === null || value === undefined) {
+                return 'N/A';
+            }
+            return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+        function renderHoldingsTable(holdingsList) {
+            const container = document.getElementById('holdingsContent');
+
+            if (!holdingsList.length) {
+                container.innerHTML = '<p class="text-muted">No holdings yet. Add your first position above.</p>';
+                return;
+            }
+
+            let html = '<div class="table-shell table-responsive"><table class="table table-sm">';
+            html += '<thead><tr><th>Symbol</th><th>Shares</th><th>Avg Cost</th><th>Price</th>' +
+                    '<th>Value</th><th>Unrealized P&amp;L</th><th>Rating</th><th></th></tr></thead><tbody>';
+
+            holdingsList.forEach(holding => {
+                const pnl = holding.unrealized_pnl;
+                const pnlPct = holding.unrealized_pnl_pct;
+                const pnlClass = pnl === null ? '' : (pnl >= 0 ? 'text-success' : 'text-danger');
+                const pnlText = pnl === null ? 'N/A' : `${formatMoney(pnl)} (${pnl >= 0 ? '+' : ''}${pnlPct}%)`;
+                const ratingBadge = holding.rating
+                    ? `<span class="recommendation-badge ${getHoldingRatingClass(holding.rating)}" style="font-size: 12px; padding: 4px 10px;">${holding.rating}</span>`
+                    : '<span class="text-muted">N/A</span>';
+                const changeNote = holding.rating_change
+                    ? `<div class="text-muted" style="font-size: 11px; margin-top: 4px;"><i class="fas fa-arrow-right"></i> was ${holding.rating_change.previous_label} ${holding.rating_change.days_since_previous_reading}d ago</div>`
+                    : '';
+
+                html += `
+                    <tr>
+                        <td><strong>${holding.symbol}</strong></td>
+                        <td>${holding.shares}</td>
+                        <td>${formatMoney(holding.cost_basis_per_share)}</td>
+                        <td>${formatMoney(holding.current_price)}</td>
+                        <td>${formatMoney(holding.market_value)}</td>
+                        <td class="${pnlClass}">${pnlText}</td>
+                        <td>${ratingBadge}${changeNote}</td>
+                        <td>
+                            <button class="btn btn-outline-danger btn-sm" onclick="removeHolding('${holding.symbol}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        window.loadHoldings = function() {
+            const container = document.getElementById('holdingsContent');
+            container.innerHTML = '<p class="text-muted"><i class="fas fa-spinner fa-spin"></i> Loading holdings...</p>';
+
+            fetchJson('/api/holdings')
+                .then(data => renderHoldingsTable(data.holdings))
+                .catch(error => {
+                    console.error('Error loading holdings:', error);
+                    renderInlineMessage(container, 'danger', error.message);
+                });
         };
 
+        window.addHolding = function() {
+            const symbol = document.getElementById('holdingSymbol').value.trim().toUpperCase();
+            const shares = document.getElementById('holdingShares').value;
+            const costBasis = document.getElementById('holdingCostBasis').value;
+            const purchaseDate = document.getElementById('holdingPurchaseDate').value;
+
+            if (!symbol || !shares || !costBasis) {
+                setHoldingsFeedback('warning', 'Symbol, shares, and cost per share are required.');
+                return;
+            }
+
+            const addBtn = document.getElementById('addHoldingBtn');
+            addBtn.disabled = true;
+            addBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+            setHoldingsFeedback('info', `Adding ${symbol}...`);
+
+            fetchJson('/api/holdings/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    symbol: symbol,
+                    shares: parseFloat(shares),
+                    cost_basis_per_share: parseFloat(costBasis),
+                    purchase_date: purchaseDate || null,
+                })
+            })
+            .then(data => {
+                setHoldingsFeedback('success', data.message);
+                document.getElementById('holdingSymbol').value = '';
+                document.getElementById('holdingShares').value = '';
+                document.getElementById('holdingCostBasis').value = '';
+                document.getElementById('holdingPurchaseDate').value = '';
+                loadHoldings();
+            })
+            .catch(error => {
+                console.error('Error adding holding:', error);
+                setHoldingsFeedback('danger', error.message);
+            })
+            .finally(() => {
+                addBtn.disabled = false;
+                addBtn.innerHTML = '<i class="fas fa-plus"></i> Add Holding';
+            });
+        };
+
+        window.removeHolding = function(symbol) {
+            if (!confirm(`Remove your entire ${symbol} position from Holdings?`)) {
+                return;
+            }
+
+            fetchJson('/api/holdings/remove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol })
+            })
+            .then(data => {
+                setHoldingsFeedback('success', data.message);
+                loadHoldings();
+            })
+            .catch(error => {
+                console.error('Error removing holding:', error);
+                setHoldingsFeedback('danger', error.message);
+            });
+        };
+
+        // Holdings Performance vs. Benchmark
+        let performanceChart, performanceSeries, performanceBenchmarkSeries;
+        let performanceChartInitialized = false;
+
+        function createPerformanceChart() {
+            performanceChart = LightweightCharts.createChart(document.getElementById('performanceChartPane'), {
+                layout: { textColor: '#5e6e77', background: { type: 'solid', color: '#ffffff' } },
+                grid: {
+                    vertLines: { color: 'rgba(17, 33, 45, 0.06)' },
+                    horzLines: { color: 'rgba(17, 33, 45, 0.06)' },
+                },
+                timeScale: { borderColor: 'rgba(17, 33, 45, 0.1)' },
+                rightPriceScale: { borderColor: 'rgba(17, 33, 45, 0.1)' },
+                autoSize: true,
+            });
+            performanceSeries = performanceChart.addLineSeries({ color: '#0f766e', lineWidth: 2, priceLineVisible: false });
+            performanceBenchmarkSeries = performanceChart.addLineSeries({ color: '#c2410c', lineWidth: 2, priceLineVisible: false });
+            performanceChartInitialized = true;
+        }
+
+        window.loadHoldingsPerformance = function() {
+            const benchmark = (document.getElementById('performanceBenchmark').value || 'SPY').trim().toUpperCase();
+            const summary = document.getElementById('performanceSummary');
+            const chartPane = document.getElementById('performanceChartPane');
+            const legend = document.getElementById('performanceLegend');
+            const btn = document.getElementById('loadPerformanceBtn');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+            summary.innerHTML = '<p class="text-muted">Loading performance...</p>';
+            chartPane.style.display = 'none';
+            legend.style.display = 'none';
+
+            fetchJson(`/api/holdings/performance?benchmark=${encodeURIComponent(benchmark)}`)
+                .then(data => {
+                    if (!data.dates.length) {
+                        const excludedNote = data.excluded_holdings.length
+                            ? ` (excluded: ${data.excluded_holdings.join(', ')} - no purchase date or price history on file)`
+                            : '';
+                        renderInlineMessage(summary, 'secondary',
+                            `No holdings with a purchase date to chart yet.${excludedNote}`);
+                        return;
+                    }
+
+                    const firstDate = data.dates[0];
+                    const portfolioReturn = formatPercent(data.portfolio_return_pct / 100);
+                    const benchmarkReturn = formatPercent(data.benchmark_return_pct / 100);
+                    const excludedNote = data.excluded_holdings.length
+                        ? `<div class="text-muted" style="font-size: 12px; margin-top: 4px;">Excluded: ${data.excluded_holdings.join(', ')} (no purchase date or price history on file)</div>`
+                        : '';
+
+                    summary.innerHTML = `
+                        <div>Your holdings: <strong class="${data.portfolio_return_pct >= 0 ? 'text-success' : 'text-danger'}">${portfolioReturn}</strong>
+                        since ${firstDate} (${formatMoney(data.total_invested)} invested, now worth ${formatMoney(data.current_value)})
+                        &nbsp;|&nbsp; ${data.benchmark_symbol} over the same dates and dollars:
+                        <strong class="${data.benchmark_return_pct >= 0 ? 'text-success' : 'text-danger'}">${benchmarkReturn}</strong></div>
+                        ${excludedNote}
+                    `;
+
+                    if (!performanceChartInitialized) {
+                        createPerformanceChart();
+                    }
+                    performanceSeries.setData(data.dates.map((d, i) => ({ time: d, value: data.portfolio_value[i] })));
+                    performanceBenchmarkSeries.setData(data.dates.map((d, i) => ({ time: d, value: data.benchmark_value[i] })));
+                    chartPane.style.display = 'block';
+                    legend.style.display = 'flex';
+                    document.getElementById('performanceBenchmarkLegendLabel').textContent = data.benchmark_symbol;
+                    performanceChart.timeScale().fitContent();
+                })
+                .catch(error => {
+                    console.error('Error loading holdings performance:', error);
+                    renderInlineMessage(summary, 'danger', error.message);
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-sync"></i> Update';
+                });
+        };
+
+        // Backtesting Functions
+        let backtestEquityChart, backtestFollowSeries, backtestBuyHoldSeries;
+        let backtestEquityChartInitialized = false;
+
+        function setBacktestFeedback(variant, message) {
+            const feedback = document.getElementById('backtestActionFeedback');
+            if (!feedback) {
+                return;
+            }
+            feedback.innerHTML = message ? `<div class="alert alert-${variant} mb-0">${message}</div>` : '';
+        }
+
+        function formatPercent(value) {
+            if (value === null || value === undefined) {
+                return 'N/A';
+            }
+            return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
+        }
+
+        function renderBacktestResultsList(results) {
+            const container = document.getElementById('backtestResultsList');
+
+            if (!results.length) {
+                container.innerHTML = '<p class="text-muted">No backtests run yet. Use the form above to run one.</p>';
+                return;
+            }
+
+            let html = '<div class="table-shell table-responsive"><table class="table table-sm">';
+            html += '<thead><tr><th>Symbol</th><th>Window</th><th>Profile</th><th>Follow Signal</th>' +
+                    '<th>Buy &amp; Hold</th><th>Run At</th><th></th></tr></thead><tbody>';
+
+            results.forEach(run => {
+                const followClass = run.follow_signal_cumulative_return >= 0 ? 'text-success' : 'text-danger';
+                const buyHoldClass = run.buy_and_hold_cumulative_return >= 0 ? 'text-success' : 'text-danger';
+                html += `
+                    <tr>
+                        <td><strong>${run.symbol}</strong></td>
+                        <td>${run.start_date} &rarr; ${run.end_date}</td>
+                        <td>${run.profile}</td>
+                        <td class="${followClass}">${formatPercent(run.follow_signal_cumulative_return)}</td>
+                        <td class="${buyHoldClass}">${formatPercent(run.buy_and_hold_cumulative_return)}</td>
+                        <td class="text-muted">${(run.run_at || '').replace('T', ' ').slice(0, 16)}</td>
+                        <td><button class="btn btn-outline-primary btn-sm" onclick="showBacktestDetail(${run.id})">
+                            <i class="fas fa-eye"></i> View</button></td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        window.loadBacktestResults = function() {
+            const container = document.getElementById('backtestResultsList');
+            container.innerHTML = '<p class="text-muted"><i class="fas fa-spinner fa-spin"></i> Loading past runs...</p>';
+
+            fetchJson('/api/backtest/results')
+                .then(data => renderBacktestResultsList(data.results))
+                .catch(error => {
+                    console.error('Error loading backtest results:', error);
+                    renderInlineMessage(container, 'danger', error.message);
+                });
+        };
+
+        window.runBacktest = function() {
+            const symbol = document.getElementById('backtestSymbol').value.trim().toUpperCase();
+            const startDate = document.getElementById('backtestStartDate').value;
+            const endDate = document.getElementById('backtestEndDate').value;
+            const profile = document.getElementById('backtestProfile').value;
+            const holdingPeriod = parseInt(document.getElementById('backtestHoldingPeriod').value, 10);
+            const stepDays = parseInt(document.getElementById('backtestStepDays').value, 10);
+
+            if (!symbol || !startDate || !endDate) {
+                setBacktestFeedback('warning', 'Symbol, start date, and end date are required.');
+                return;
+            }
+
+            const runBtn = document.getElementById('runBacktestBtn');
+            runBtn.disabled = true;
+            runBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+            setBacktestFeedback('info', `Running backtest for ${symbol} - this can take a few seconds...`);
+
+            fetchJson('/api/backtest/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    symbol: symbol, start_date: startDate, end_date: endDate, profile: profile,
+                    holding_period_days: Number.isFinite(holdingPeriod) ? holdingPeriod : undefined,
+                    step_days: Number.isFinite(stepDays) ? stepDays : undefined,
+                })
+            })
+            .then(data => {
+                setBacktestFeedback('success', `Backtest complete: ${data.steps_evaluated} steps evaluated.`);
+                loadBacktestResults();
+                showBacktestDetailFromReport(data);
+            })
+            .catch(error => {
+                console.error('Error running backtest:', error);
+                setBacktestFeedback('danger', error.message);
+            })
+            .finally(() => {
+                runBtn.disabled = false;
+                runBtn.innerHTML = '<i class="fas fa-play"></i> Run Backtest';
+            });
+        };
+
+        window.showBacktestDetail = function(runId) {
+            fetchJson(`/api/backtest/results/${runId}`)
+                .then(data => showBacktestDetailFromReport(data))
+                .catch(error => {
+                    console.error('Error loading backtest detail:', error);
+                    setBacktestFeedback('danger', error.message);
+                });
+        };
+
+        function showBacktestDetailFromReport(report) {
+            document.getElementById('backtestDetailRow').style.display = 'block';
+            document.getElementById('backtestDetailCaption').textContent =
+                `${report.symbol} | ${report.start_date} to ${report.end_date} | ${report.profile} profile | ` +
+                `${report.steps_evaluated} steps evaluated` +
+                (report.fundamentals_available ? '' : ' (EDGAR fundamentals unavailable for this symbol - sector/growth scored neutrally)');
+
+            renderBacktestLabelPerformance(report.label_performance);
+            renderBacktestEquityCurve(report.equity_curve);
+
+            document.getElementById('backtestDetailRow').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function renderBacktestLabelPerformance(labelPerformance) {
+            const container = document.getElementById('backtestLabelPerformance');
+            const labels = Object.keys(labelPerformance || {});
+
+            if (!labels.length) {
+                container.innerHTML = '<p class="text-muted">No steps evaluated.</p>';
+                return;
+            }
+
+            let html = '<div class="table-shell table-responsive"><table class="table table-sm">';
+            html += '<thead><tr><th>Label</th><th>Count</th><th>Avg Forward Return</th><th>Win Rate</th></tr></thead><tbody>';
+
+            labels.forEach(label => {
+                const stats = labelPerformance[label];
+                const returnClass = stats.avg_forward_return >= 0 ? 'text-success' : 'text-danger';
+                html += `
+                    <tr>
+                        <td><span class="recommendation-badge ${getHoldingRatingClass(label)}" style="font-size: 12px; padding: 4px 10px;">${label}</span></td>
+                        <td>${stats.count}</td>
+                        <td class="${returnClass}">${formatPercent(stats.avg_forward_return)}</td>
+                        <td>${(stats.win_rate * 100).toFixed(0)}%</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        function createBacktestEquityChart() {
+            backtestEquityChart = LightweightCharts.createChart(document.getElementById('backtestEquityChartPane'), {
+                layout: { textColor: '#5e6e77', background: { type: 'solid', color: '#ffffff' } },
+                grid: {
+                    vertLines: { color: 'rgba(17, 33, 45, 0.06)' },
+                    horzLines: { color: 'rgba(17, 33, 45, 0.06)' },
+                },
+                timeScale: { borderColor: 'rgba(17, 33, 45, 0.1)' },
+                rightPriceScale: { borderColor: 'rgba(17, 33, 45, 0.1)' },
+                autoSize: true,
+            });
+            backtestFollowSeries = backtestEquityChart.addLineSeries({ color: '#0f766e', lineWidth: 2, priceLineVisible: false });
+            backtestBuyHoldSeries = backtestEquityChart.addLineSeries({ color: '#c2410c', lineWidth: 2, priceLineVisible: false });
+            backtestEquityChartInitialized = true;
+        }
+
+        function renderBacktestEquityCurve(equityCurve) {
+            if (!backtestEquityChartInitialized) {
+                createBacktestEquityChart();
+            }
+            backtestFollowSeries.setData((equityCurve || []).map(point => ({ time: point.date, value: point.follow_signal_cumulative })));
+            backtestBuyHoldSeries.setData((equityCurve || []).map(point => ({ time: point.date, value: point.buy_and_hold_cumulative })));
+            backtestEquityChart.timeScale().fitContent();
+        }
+
+        // Benchmark Management Functions
         window.refreshBenchmarks = function() {
             const btn = document.querySelector('button[onclick="refreshBenchmarks()"]');
             btn.disabled = true;
