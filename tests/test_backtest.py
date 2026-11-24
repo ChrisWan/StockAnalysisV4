@@ -105,29 +105,50 @@ class AggregateByLabelTests(unittest.TestCase):
 class BuildEquityCurveTests(unittest.TestCase):
     def test_compounds_only_bullish_steps_and_tracks_buy_and_hold(self):
         dates = pd.bdate_range('2024-01-01', periods=5)
+        iso = [d.date().isoformat() for d in dates]
         price_data = pd.DataFrame({'Close': [100.0, 110.0, 121.0, 108.9, 130.0]}, index=dates)
         steps = [
-            {'date': dates[0].date().isoformat(), 'label': 'BUY', 'forward_return': 0.10},
-            {'date': dates[1].date().isoformat(), 'label': 'HOLD', 'forward_return': 0.05},
-            {'date': dates[2].date().isoformat(), 'label': 'STRONG BUY', 'forward_return': -0.10},
-            {'date': dates[3].date().isoformat(), 'label': 'SELL', 'forward_return': 0.02},
+            {'date': iso[0], 'exit_date': iso[1], 'label': 'BUY', 'forward_return': 0.10},
+            {'date': iso[1], 'exit_date': iso[2], 'label': 'HOLD', 'forward_return': 0.10},
+            {'date': iso[2], 'exit_date': iso[3], 'label': 'STRONG BUY', 'forward_return': -0.10},
+            {'date': iso[3], 'exit_date': iso[4], 'label': 'SELL', 'forward_return': 0.194},
         ]
 
         curve = backtest._build_equity_curve(steps, price_data)
 
-        # Step 0 (BUY): 1 * 1.10 = 1.10
-        self.assertAlmostEqual(curve[0]['follow_signal_cumulative'], 1.10, places=4)
-        # Step 1 (HOLD): unchanged, still 1.10
+        # Step 0 (BUY): position opens at 100, marked at entry = 1.00
+        self.assertAlmostEqual(curve[0]['follow_signal_cumulative'], 1.00, places=4)
+        # Step 1 (HOLD): BUY position exits here, realized 1.10
         self.assertAlmostEqual(curve[1]['follow_signal_cumulative'], 1.10, places=4)
-        # Step 2 (STRONG BUY): 1.10 * 0.90 = 0.99
-        self.assertAlmostEqual(curve[2]['follow_signal_cumulative'], 0.99, places=4)
-        # Step 3 (SELL): unchanged, still 0.99
+        # Step 2 (STRONG BUY): opens at 121, marked at entry = 1.10
+        self.assertAlmostEqual(curve[2]['follow_signal_cumulative'], 1.10, places=4)
+        # Step 3 (SELL): STRONG BUY exits, realized 1.10 * 0.90 = 0.99
         self.assertAlmostEqual(curve[3]['follow_signal_cumulative'], 0.99, places=4)
 
         # buy_and_hold tracks price relative to the first step's price (100.0)
         self.assertAlmostEqual(curve[0]['buy_and_hold_cumulative'], 1.0, places=4)
         self.assertAlmostEqual(curve[1]['buy_and_hold_cumulative'], 1.10, places=4)
         self.assertAlmostEqual(curve[3]['buy_and_hold_cumulative'], 1.089, places=4)
+
+    def test_overlapping_holding_periods_do_not_double_count(self):
+        # Price rises 10%/day; holding period is 2 steps, so each step's
+        # forward return (+21%) overlaps the next step's.
+        dates = pd.bdate_range('2024-01-01', periods=5)
+        iso = [d.date().isoformat() for d in dates]
+        price_data = pd.DataFrame({'Close': [100.0, 110.0, 121.0, 133.1, 146.41]}, index=dates)
+        steps = [
+            {'date': iso[0], 'exit_date': iso[2], 'label': 'BUY', 'forward_return': 0.21},
+            {'date': iso[1], 'exit_date': iso[3], 'label': 'BUY', 'forward_return': 0.21},
+            {'date': iso[2], 'exit_date': iso[4], 'label': 'BUY', 'forward_return': 0.21},
+        ]
+
+        curve = backtest._build_equity_curve(steps, price_data)
+
+        # Always-bullish must equal buy-and-hold (121/100), not 1.21**3 = 1.7716
+        self.assertAlmostEqual(curve[1]['follow_signal_cumulative'], 1.10, places=4)
+        self.assertAlmostEqual(curve[2]['follow_signal_cumulative'], 1.21, places=4)
+        self.assertAlmostEqual(curve[2]['follow_signal_cumulative'],
+                               curve[2]['buy_and_hold_cumulative'], places=4)
 
     def test_empty_steps_returns_empty_curve(self):
         self.assertEqual(backtest._build_equity_curve([], pd.DataFrame()), [])

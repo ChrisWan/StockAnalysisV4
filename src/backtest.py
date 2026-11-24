@@ -73,26 +73,48 @@ def _aggregate_by_label(steps):
 def _build_equity_curve(steps, price_data):
     """Two comparable cumulative-return series sharing the steps' x-axis:
 
-    - follow_signal: compounds each step's forward return only when that
-      step's label was bullish (BUY/STRONG BUY), else holds flat (no
-      position) for that step. Steps are treated as independent sequential
-      decisions, not an overlapping multi-position portfolio.
+    - follow_signal: a single position at a time. A bullish (BUY/STRONG BUY)
+      step opens a position held until that step's exit_date (one holding
+      period later); signals from steps before the exit are ignored. Each
+      point is marked to market at the step's close while a position is open.
+      Compounding every bullish step's full forward return instead would
+      count the same price move several times whenever step_days is shorter
+      than the holding period (the default 5 vs 20 days counted it ~4x).
     - buy_and_hold: price at each step date relative to the first step's
       price, for a direct comparison over the same window.
     """
     if not steps:
         return []
 
-    start_price = float(price_data.loc[pd.Timestamp(steps[0]['date']), 'Close'])
-    follow_cumulative = 1.0
+    def close_on(day):
+        return float(price_data.loc[pd.Timestamp(day), 'Close'])
+
+    start_price = close_on(steps[0]['date'])
+    realized = 1.0
+    position = None
     curve = []
     for step in steps:
-        if step['label'] in BULLISH_LABELS:
-            follow_cumulative *= (1 + step['forward_return'])
-        step_price = float(price_data.loc[pd.Timestamp(step['date']), 'Close'])
+        if position is not None and step['date'] >= position['exit_date']:
+            realized = position['realized_at_entry'] * (1 + position['forward_return'])
+            position = None
+
+        step_price = close_on(step['date'])
+        if position is None and step['label'] in BULLISH_LABELS:
+            position = {
+                'entry_price': step_price,
+                'exit_date': step['exit_date'],
+                'forward_return': step['forward_return'],
+                'realized_at_entry': realized,
+            }
+
+        if position is None:
+            follow_value = realized
+        else:
+            follow_value = position['realized_at_entry'] * step_price / position['entry_price']
+
         curve.append({
             'date': step['date'],
-            'follow_signal_cumulative': round(follow_cumulative, 4),
+            'follow_signal_cumulative': round(follow_value, 4),
             'buy_and_hold_cumulative': round(step_price / start_price, 4),
         })
     return curve
@@ -164,6 +186,7 @@ def run_backtest(symbol, start_date, end_date, profile='balanced',
         exit_price = float(price_data['Close'].iloc[forward_position])
         steps.append({
             'date': eval_date.date().isoformat(),
+            'exit_date': price_data.index[forward_position].date().isoformat(),
             'label': scorecard['label'],
             'total_score': scorecard['total_score'],
             'forward_return': round((exit_price - entry_price) / entry_price, 4),

@@ -198,7 +198,7 @@ Run the tests with `uv run pytest`.
 - Technical indicators are computed once on the full price series and read per step by slicing - this is provably lookahead-safe since every indicator (rolling window, EWM, `.shift()`) only ever looks backward; see `tests/test_backtest.py`'s `NoLookaheadProofTests`.
 - Fundamentals are point-in-time: `edgar_provider.py` filters XBRL facts to only those filed on or before each evaluation date, so a step never sees a restatement or later filing that hadn't happened yet. Symbols without EDGAR coverage (non-US-listed) still backtest, with the sector/growth component scored neutrally for every step.
 - **Known simplification**: sector benchmark medians always use today's `sector_benchmarks.json`, not a historical snapshot (none exists) - this is the one part of the backtest that isn't truly point-in-time, and the approximation gets worse the further back the window goes.
-- Reports win rate and average forward return per recommendation label, plus a "follow the signal" (compounds returns only on BUY/STRONG BUY steps) vs. buy-and-hold equity curve. Every run is persisted in `analysis.db` for later review.
+- Reports win rate and average forward return per recommendation label, plus a "follow the signal" vs. buy-and-hold equity curve. Follow-the-signal holds one position at a time: a BUY/STRONG BUY step opens it for one holding period, and signals before its exit are ignored, so overlapping 20-day windows on a 5-day step are never counted twice. Runs saved before this fix overstated follow-the-signal returns; re-run them to compare. Every run is persisted in `analysis.db` for later review.
 
 ## Data Files
 
