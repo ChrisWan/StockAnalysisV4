@@ -223,6 +223,38 @@ class RunBacktestTests(unittest.TestCase):
         expected_return = round((0.5 * 20) / entry_price, 4)
         self.assertAlmostEqual(first_step['forward_return'], expected_return, places=4)
 
+    def test_valuation_uses_split_close_and_split_history(self):
+        # Close is dividend-adjusted (for returns); valuation must use the
+        # split-only close plus split history so filed share counts line up.
+        price_data = _linear_price_frame(periods=400, slope=0.5, base=100.0)
+        price_data['Split Close'] = price_data['Close'] + 3.0
+        provider = FakeProvider(price_data)
+        splits = [(date(2026, 3, 20), 1.5)]
+        provider.get_splits = lambda symbol: splits
+        calls = []
+
+        def recording_compute(company_facts, current_price=None, as_of=None, splits=None):
+            calls.append((as_of, current_price, splits))
+            return {}
+
+        edgar = mock.Mock()
+        edgar.get_company_facts.return_value = {'facts': {}}
+        start = price_data.index[250].date()
+        end = price_data.index[300].date()
+
+        with mock.patch.object(backtest, 'get_provider', return_value=provider), \
+             mock.patch.object(backtest, '_edgar', edgar), \
+             mock.patch.object(backtest, 'compute_fundamentals', recording_compute):
+            report = backtest.run_backtest('SNEX', start, end, holding_period_days=20, step_days=5)
+
+        as_of, current_price, passed_splits = calls[0]
+        eval_position = price_data.index.get_loc(pd.Timestamp(as_of))
+        self.assertAlmostEqual(current_price, 100.0 + 0.5 * eval_position + 3.0)
+        self.assertEqual(passed_splits, splits)
+        # Forward returns still come from Close
+        expected_return = round((0.5 * 20) / (100.0 + 0.5 * eval_position), 4)
+        self.assertAlmostEqual(report['steps'][0]['forward_return'], expected_return, places=4)
+
     def test_run_backtest_raises_for_invalid_date_range(self):
         price_data = _synthetic_price_frame(periods=100)
         provider = FakeProvider(price_data)

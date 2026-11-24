@@ -20,7 +20,7 @@ from datetime import date, datetime
 import pandas as pd
 
 import db
-from data_providers import get_provider
+from data_providers import fetch_splits, get_provider
 from edgar_provider import EdgarFundamentalsProvider, compute_fundamentals
 from indicators import build_technical_momentum_summary, calculate_technical_indicators
 from scoring import build_recommendation_scorecard, calculate_fundamental_analysis
@@ -152,6 +152,10 @@ def run_backtest(symbol, start_date, end_date, profile='balanced',
         company_facts = None
 
     sector = _resolve_sector(provider, symbol)
+    splits = fetch_splits(provider, symbol) if company_facts is not None else []
+    # Valuation pairs price with filed share counts, so it needs the
+    # split-only close; Close is dividend-adjusted (right for returns).
+    valuation_close = price_data['Split Close'] if 'Split Close' in price_data else price_data['Close']
 
     trading_dates = [d for d in price_data.index if start_date <= d.date() <= end_date]
     step_dates = trading_dates[::step_days]
@@ -173,7 +177,8 @@ def run_backtest(symbol, start_date, end_date, profile='balanced',
         if company_facts is not None:
             try:
                 fundamental_metrics.update(compute_fundamentals(
-                    company_facts, current_price=entry_price, as_of=eval_date.date()))
+                    company_facts, current_price=float(valuation_close.iloc[eval_position]),
+                    as_of=eval_date.date(), splits=splits))
             except Exception as error:
                 LOGGER.warning("compute_fundamentals failed for %s as_of %s: %s",
                                symbol, eval_date.date(), error)

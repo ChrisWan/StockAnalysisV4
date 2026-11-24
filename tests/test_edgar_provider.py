@@ -107,9 +107,9 @@ class XbrlComputationTests(unittest.TestCase):
         self.assertAlmostEqual(metrics['earnings_growth'], (51.7 - 47.0) / 47.0, places=6)
         self.assertIn('roe_growth_yoy', metrics)
         self.assertAlmostEqual(metrics['current_ratio'], 2.0)
-        # Market-based: P/E = 100 / TTM EPS (4.0); market cap = 100 * 1000
-        self.assertAlmostEqual(metrics['pe_ratio'], 25.0)
+        # Market-based: market cap = 100 * 1000; P/E = market cap / TTM income (51.7)
         self.assertAlmostEqual(metrics['market_cap'], 100_000.0)
+        self.assertAlmostEqual(metrics['pe_ratio'], 100_000.0 / 51.7, places=4)
         self.assertAlmostEqual(metrics['price_to_sales'], 100_000.0 / 517.0, places=4)
         self.assertAlmostEqual(metrics['price_to_book'], 100_000.0 / 280.0, places=4)
 
@@ -118,6 +118,118 @@ class XbrlComputationTests(unittest.TestCase):
         self.assertNotIn('pe_ratio', metrics)
         self.assertNotIn('market_cap', metrics)
         self.assertIn('profit_margin', metrics)
+
+    def test_pe_ratio_unaffected_by_split_between_filings(self):
+        # Mirrors SNEX 2026: a 3-for-2 split lands after the first two quarters
+        # were filed, so their EPS facts stay on the pre-split basis while later
+        # quarters are reported post-split. Summing those EPS facts would give
+        # 1.5 + 1.5 + 1.0 + 1.0 = 5.0 instead of the true post-split 4.0.
+        ends = ['2025-03-29', '2025-06-28', '2025-09-27', '2025-12-27']
+        filed = ['2025-05-01', '2025-08-01', '2025-11-01', '2026-02-01']
+        facts = {
+            'entityName': 'Split Corp',
+            'facts': {
+                'us-gaap': {
+                    'NetIncomeLoss': {'units': {'USD': [
+                        _q(end, 150.0, filed=f) for end, f in zip(ends, filed)]}},
+                    'EarningsPerShareDiluted': {'units': {'USD/shares': [
+                        _q(end, eps, filed=f)
+                        for end, eps, f in zip(ends, [1.5, 1.5, 1.0, 1.0], filed)]}},
+                },
+                'dei': {
+                    'EntityCommonStockSharesOutstanding': {'units': {'shares': [
+                        _i('2025-04-30', 100.0, filed='2025-05-01'),
+                        _i('2026-01-31', 150.0, filed='2026-02-01')]}},
+                },
+            },
+        }
+
+        metrics = edgar_provider.compute_fundamentals(facts, current_price=40.0)
+
+        # Market cap 40 * 150 = 6000; TTM income 600 -> P/E 10 (= 40 / 4.0 post-split EPS)
+        self.assertAlmostEqual(metrics['market_cap'], 6000.0)
+        self.assertAlmostEqual(metrics['pe_ratio'], 10.0)
+
+    def test_share_count_brought_onto_todays_split_basis(self):
+        # SNEX: 50 shares counted 2026-02-02, then two 3-for-2 splits. A price
+        # of 40 on today's basis means market cap 40 * 50 * 2.25 = 4500, not 2000.
+        facts = build_company_facts()
+        facts['facts']['dei']['EntityCommonStockSharesOutstanding'] = {'units': {'shares': [
+            _i('2026-02-02', 50.0)]}}
+        splits = [(date(2025, 3, 21), 1.5), (date(2026, 3, 20), 1.5), (date(2026, 7, 17), 1.5)]
+
+        metrics = edgar_provider.compute_fundamentals(facts, current_price=40.0, splits=splits)
+
+        self.assertAlmostEqual(metrics['shares_outstanding'], 112.5)
+        self.assertAlmostEqual(metrics['market_cap'], 4500.0)
+        self.assertAlmostEqual(metrics['pe_ratio'], 4500.0 / 51.7, places=4)
+
+    def test_split_factor_ignores_splits_on_or_before_share_count_date(self):
+        splits = [(date(2026, 3, 20), 1.5), (date(2026, 7, 17), 2.0)]
+
+        self.assertEqual(edgar_provider.split_factor_after(splits, date(2026, 3, 20)), 2.0)
+        self.assertEqual(edgar_provider.split_factor_after(splits, date(2026, 8, 1)), 1.0)
+        self.assertEqual(edgar_provider.split_factor_after(None, date(2026, 8, 1)), 1.0)
+
+    def test_pe_ratio_negative_for_trailing_loss(self):
+        facts = build_company_facts()
+        facts['facts']['us-gaap']['NetIncomeLoss'] = {'units': {'USD': [
+            _q(end, -10.0) for end in QUARTER_ENDS]}}
+
+        metrics = edgar_provider.compute_fundamentals(facts, current_price=100.0)
+
+        self.assertAlmostEqual(metrics['pe_ratio'], 100_000.0 / -40.0)
+
+    def test_pick_concept_skips_concept_company_stopped_reporting(self):
+        # AAPL/MU: 'Revenues' still holds facts from 2018, before ASC 606.
+        us_gaap = {
+            'Revenues': {'units': {'USD': [_q('2018-09-29', 62.9)]}},
+            'RevenueFromContractWithCustomerExcludingAssessedTax': {'units': {'USD': [
+                _q('2026-09-26', 114.5)]}},
+        }
+
+        picked = edgar_provider.pick_concept(us_gaap, edgar_provider.REVENUE_CONCEPTS, ['USD'])
+
+        self.assertEqual(picked[0]['val'], 114.5)
+
+    def test_pick_concept_prefers_total_revenues_when_both_current(self):
+        # SNEX: the ASC 606 concept is only fee revenue, a small slice of the total.
+        us_gaap = {
+            'Revenues': {'units': {'USD': [_q('2026-06-30', 40193.0)]}},
+            'RevenueFromContractWithCustomerExcludingAssessedTax': {'units': {'USD': [
+                _q('2026-06-30', 815.0)]}},
+        }
+
+        picked = edgar_provider.pick_concept(us_gaap, edgar_provider.REVENUE_CONCEPTS, ['USD'])
+
+        self.assertEqual(picked[0]['val'], 40193.0)
+
+    def test_pick_concept_judges_freshness_as_of_filing_date(self):
+        us_gaap = {
+            'Revenues': {'units': {'USD': [_q('2018-09-29', 62.9, filed='2018-11-05')]}},
+            'RevenueFromContractWithCustomerExcludingAssessedTax': {'units': {'USD': [
+                _q('2019-12-28', 91.8, filed='2020-01-29')]}},
+        }
+
+        picked = edgar_provider.pick_concept(
+            us_gaap, edgar_provider.REVENUE_CONCEPTS, ['USD'], as_of='2019-01-01')
+
+        self.assertEqual(picked[0]['val'], 62.9)
+
+    def test_stale_revenue_series_is_dropped(self):
+        # JPM: its only matching revenue concept stopped in 2014, so revenue-
+        # based metrics must be omitted (Yahoo's values then stay in place)
+        # rather than computed from decade-old numbers.
+        facts = build_company_facts()
+        facts['facts']['us-gaap']['Revenues'] = {'units': {'USD': [
+            _q(end, 100.0) for end in ['2014-03-31', '2014-06-30', '2014-09-30', '2014-12-31']]}}
+
+        metrics = edgar_provider.compute_fundamentals(facts, current_price=100.0)
+
+        self.assertNotIn('price_to_sales', metrics)
+        self.assertNotIn('profit_margin', metrics)
+        self.assertNotIn('revenue_growth_yoy', metrics)
+        self.assertIn('return_on_equity', metrics)
 
     def test_compute_fundamentals_handles_empty_facts(self):
         self.assertEqual(edgar_provider.compute_fundamentals({'facts': {}}), {})
@@ -130,8 +242,9 @@ class FakeEdgar:
         self.result, self.error = result, error
         self.received_price = 'unset'
 
-    def get_fundamentals(self, symbol, current_price=None):
+    def get_fundamentals(self, symbol, current_price=None, splits=None):
         self.received_price = current_price
+        self.received_splits = splits
         if self.error:
             raise self.error
         return dict(self.result)
@@ -162,6 +275,23 @@ class CompositeProviderTests(unittest.TestCase):
         self.assertEqual(edgar.received_price, 50.0)      # price handed to EDGAR
         self.assertIn('edgar', merged['fundamentals_source'])
         self.assertEqual(provider.name, 'edgar+yahoo')
+
+    def test_passes_market_split_history_to_edgar(self):
+        splits = [(date(2026, 3, 20), 1.5)]
+        market = FakeMarket({'current_price': 50.0})
+        market.get_splits = lambda symbol: splits
+        edgar = FakeEdgar({'profit_margin': 0.1})
+
+        data_providers.CompositeProvider(edgar, market).get_fundamentals('SNEX')
+
+        self.assertEqual(edgar.received_splits, splits)
+
+    def test_missing_split_history_degrades_to_no_adjustment(self):
+        edgar = FakeEdgar({'profit_margin': 0.1})
+
+        data_providers.CompositeProvider(edgar, FakeMarket({'current_price': 50.0})).get_fundamentals('AAPL')
+
+        self.assertEqual(edgar.received_splits, [])
 
     def test_falls_back_to_market_when_edgar_unavailable(self):
         market = FakeMarket({'pe_ratio': 99.0, 'sector': 'Technology'})

@@ -25,11 +25,15 @@ COMPANY_FACTS_URL = 'https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.js
 REQUEST_TIMEOUT = 30
 
 # XBRL concept names in preference order for each metric we compute.
+# 'Revenues' is the taxonomy's total; for brokers/banks the ASC 606
+# RevenueFromContractWithCustomer concepts cover only fee revenue (SNEX:
+# ~$0.8B of ~$40B per quarter), so they rank second.
 REVENUE_CONCEPTS = [
-    'RevenueFromContractWithCustomerExcludingAssessedTax',
     'Revenues',
+    'RevenueFromContractWithCustomerExcludingAssessedTax',
     'SalesRevenueNet',
     'RevenueFromContractWithCustomerIncludingAssessedTax',
+    'RevenuesNetOfInterestExpense',
 ]
 NET_INCOME_CONCEPTS = ['NetIncomeLoss', 'ProfitLoss']
 OCF_CONCEPTS = [
@@ -40,9 +44,15 @@ EQUITY_CONCEPTS = [
     'StockholdersEquity',
     'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
 ]
-EPS_CONCEPTS = ['EarningsPerShareDiluted', 'EarningsPerShareBasic']
 CURRENT_ASSETS_CONCEPTS = ['AssetsCurrent']
 CURRENT_LIABILITIES_CONCEPTS = ['LiabilitiesCurrent']
+
+# Concepts last reported within this many days of the freshest candidate
+# count as current; list order only breaks ties among them.
+CONCEPT_FRESHNESS_DAYS = 120
+# A series ending this long before the company's latest reported period is
+# a concept the company stopped using, not current data.
+STALE_SERIES_DAYS = 200
 
 
 def _user_agent():
@@ -51,17 +61,41 @@ def _user_agent():
         'StockAnalysisV4/1.0 (set EDGAR_USER_AGENT to your contact email)')
 
 
-def pick_concept(us_gaap, concept_names, unit_names):
-    """Return the units list for the first available concept, else None."""
-    for name in concept_names:
-        concept = us_gaap.get(name)
-        if not concept:
+def pick_concept(us_gaap, concept_names, unit_names, as_of=None):
+    """Return the units list for the preferred concept with current data.
+
+    Companies switch concepts over time (AAPL used 'Revenues' until 2018,
+    then the ASC 606 concept), leaving the old one in companyfacts with
+    years-stale facts. Concepts not reported within CONCEPT_FRESHNESS_DAYS of
+    the freshest candidate are skipped; `as_of` limits that judgement to
+    facts filed by then.
+    """
+    candidates = []
+    for rank, name in enumerate(concept_names):
+        units = us_gaap.get(name, {}).get('units', {})
+        entries = next((units[unit] for unit in unit_names if units.get(unit)), None)
+        if not entries:
             continue
-        units = concept.get('units', {})
-        for unit in unit_names:
-            if unit in units and units[unit]:
-                return units[unit]
-    return None
+        ends = [e['end'] for e in entries
+                if e.get('end') and (as_of is None or (e.get('filed') and e['filed'] <= as_of))]
+        if ends:
+            candidates.append((max(ends), rank, entries))
+    if not candidates:
+        return None
+
+    freshest = _parse_date(max(latest for latest, _, _ in candidates))
+    cutoff = (freshest - timedelta(days=CONCEPT_FRESHNESS_DAYS)).isoformat()
+    return min((c for c in candidates if c[0] >= cutoff), key=lambda c: c[1])[2]
+
+
+def _drop_stale(series_by_name):
+    """Empty any series that ends long before the company's latest period."""
+    latest = max((series[-1][0] for series in series_by_name.values() if series), default=None)
+    if latest is None:
+        return series_by_name
+    cutoff = latest - timedelta(days=STALE_SERIES_DAYS)
+    return {name: (series if series and series[-1][0] >= cutoff else [])
+            for name, series in series_by_name.items()}
 
 
 def _parse_date(value):
@@ -191,11 +225,24 @@ def ttm_growth(series):
     return (current - prior) / abs(prior)
 
 
-def compute_fundamentals(company_facts, current_price=None, as_of=None):
+def split_factor_after(splits, after_date):
+    """Cumulative ratio of the splits with an ex-date after `after_date`."""
+    factor = 1.0
+    for split_date, ratio in splits or []:
+        if split_date > after_date:
+            factor *= ratio
+    return factor
+
+
+def compute_fundamentals(company_facts, current_price=None, as_of=None, splits=None):
     """Compute the app's fundamental metrics from a companyfacts document.
 
     current_price (optional) enables market-based ratios (P/E, P/S, P/B,
-    market cap) on top of the accounting metrics.
+    market cap) on top of the accounting metrics. It must be on today's
+    split basis (as quoted now, or split-adjusted history); `splits` -
+    (ex_date, ratio) pairs - lets the filed share count be brought onto
+    that same basis. Without it, a split after the share count's date
+    understates market cap by the split ratio.
 
     as_of (optional date or ISO date string) restricts computation to facts
     filed on or before that date, reconstructing what would have been known
@@ -214,19 +261,28 @@ def compute_fundamentals(company_facts, current_price=None, as_of=None):
 
     metrics = {'company_name': company_facts.get('entityName')}
 
-    revenue = quarterly_series(pick_concept(us_gaap, REVENUE_CONCEPTS, ['USD']) or [], as_of=as_of)
-    net_income = quarterly_series(pick_concept(us_gaap, NET_INCOME_CONCEPTS, ['USD']) or [], as_of=as_of)
-    ocf = quarterly_series(pick_concept(us_gaap, OCF_CONCEPTS, ['USD']) or [], as_of=as_of)
-    eps = quarterly_series(pick_concept(us_gaap, EPS_CONCEPTS, ['USD/shares']) or [], as_of=as_of)
-    equity = instant_series(pick_concept(us_gaap, EQUITY_CONCEPTS, ['USD']) or [], as_of=as_of)
-    current_assets = instant_series(pick_concept(us_gaap, CURRENT_ASSETS_CONCEPTS, ['USD']) or [], as_of=as_of)
-    current_liabilities = instant_series(pick_concept(us_gaap, CURRENT_LIABILITIES_CONCEPTS, ['USD']) or [], as_of=as_of)
+    def duration(concepts):
+        return quarterly_series(pick_concept(us_gaap, concepts, ['USD'], as_of) or [], as_of=as_of)
+
+    def instant(concepts):
+        return instant_series(pick_concept(us_gaap, concepts, ['USD'], as_of) or [], as_of=as_of)
+
+    series = _drop_stale({
+        'revenue': duration(REVENUE_CONCEPTS),
+        'net_income': duration(NET_INCOME_CONCEPTS),
+        'ocf': duration(OCF_CONCEPTS),
+        'equity': instant(EQUITY_CONCEPTS),
+        'current_assets': instant(CURRENT_ASSETS_CONCEPTS),
+        'current_liabilities': instant(CURRENT_LIABILITIES_CONCEPTS),
+    })
+    revenue, net_income, ocf = series['revenue'], series['net_income'], series['ocf']
+    equity = series['equity']
+    current_assets, current_liabilities = series['current_assets'], series['current_liabilities']
     shares = instant_series(
-        pick_concept(dei, ['EntityCommonStockSharesOutstanding'], ['shares']) or [], as_of=as_of)
+        pick_concept(dei, ['EntityCommonStockSharesOutstanding'], ['shares'], as_of) or [], as_of=as_of)
 
     ttm_revenue = ttm_sum(revenue)
     ttm_income = ttm_sum(net_income)
-    ttm_eps = ttm_sum(eps)
 
     # Growth (year-over-year, from quarterly filings)
     metrics['revenue_growth_yoy'] = yoy_growth(revenue)
@@ -256,13 +312,18 @@ def compute_fundamentals(company_facts, current_price=None, as_of=None):
 
     # Market-based ratios when a price is supplied
     if current_price and shares:
-        shares_outstanding = shares[-1][1]
+        shares_date, shares_outstanding = shares[-1]
+        shares_outstanding *= split_factor_after(splits, shares_date)
         market_cap = current_price * shares_outstanding
         metrics['shares_outstanding'] = shares_outstanding
         metrics['market_cap'] = market_cap
         metrics['current_price'] = current_price
-        if ttm_eps:
-            metrics['pe_ratio'] = current_price / ttm_eps if ttm_eps != 0 else None
+        # Summing four quarterly EPS facts mixes share bases whenever a split
+        # lands between the filings that supplied them (each filing restates
+        # only the periods it reports), which inflated TTM EPS ~2x for SNEX
+        # after its 2026 splits. Net income is split-invariant.
+        if ttm_income:
+            metrics['pe_ratio'] = market_cap / ttm_income
         if ttm_revenue:
             metrics['price_to_sales'] = market_cap / ttm_revenue
         if equity and equity[-1][1] > 0:
@@ -317,9 +378,10 @@ class EdgarFundamentalsProvider:
             self._facts_cache[cik] = facts
         return facts
 
-    def get_fundamentals(self, symbol, current_price=None, as_of=None):
+    def get_fundamentals(self, symbol, current_price=None, as_of=None, splits=None):
         facts = self.get_company_facts(symbol)
-        metrics = compute_fundamentals(facts, current_price=current_price, as_of=as_of)
+        metrics = compute_fundamentals(facts, current_price=current_price, as_of=as_of,
+                                       splits=splits)
         if not metrics:
             raise ValueError(f'No usable XBRL facts for {symbol!r}')
         return metrics

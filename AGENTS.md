@@ -9,7 +9,7 @@ use it. This file exists to save you from re-discovering things the hard way.
 ```bash
 uv sync                              # installs deps + pins Python 3.13 (see .python-version)
 uv run python src/app.py             # or: uv run --env-file .env python src/app.py
-uv run pytest                        # 147 tests, ~1s, no network calls
+uv run pytest                        # 167 tests, ~1s, no network calls
 ```
 
 Application source is under `src/`; `templates/`, `tests/`, and generated
@@ -146,6 +146,14 @@ of a scalar. If you add a new consumer of `get_price_history()` that doesn't
 go through `calculate_technical_indicators`, don't assume flat columns
 without checking - verify with a real (non-mocked) call, the way this bug
 was actually found.
+
+Yahoo's `Close` is the total-return series (split- *and* dividend-adjusted),
+right for returns and indicators. Anything that pairs a price with a filed
+share count (market cap, P/E, P/S, P/B) must use the split-only
+`'Split Close'` column instead, plus `get_splits()` passed to
+`compute_fundamentals(splits=...)` to bring the filed share count onto
+today's split basis - otherwise backtest valuations before a split are off
+by the split ratio (SNEX: 2.25x too cheap before its 2026 splits).
 
 **12. `yfinance`'s free options chain (`Ticker.option_chain(expiration).puts`)
 frequently reports `bid`/`ask` as `0.0` even for liquid, actively-traded

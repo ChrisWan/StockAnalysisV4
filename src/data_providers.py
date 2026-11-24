@@ -58,7 +58,17 @@ class DataProvider(Protocol):
     name: str
 
     def get_price_history(self, symbol: str, days: int = 300) -> pd.DataFrame:
-        """Daily OHLCV bars with columns Open/High/Low/Close/Volume."""
+        """Daily OHLCV bars with columns Open/High/Low/Close/Volume.
+
+        Close is the total-return series (split- and dividend-adjusted) used
+        for returns and indicators. Providers that can tell the two apart
+        add 'Split Close' - split-adjusted only - which is the price level to
+        combine with reported share counts for valuation.
+        """
+        ...
+
+    def get_splits(self, symbol: str) -> list:
+        """Stock splits as (ex_date, ratio) pairs, e.g. (date(2026, 3, 20), 1.5)."""
         ...
 
     def get_fundamentals(self, symbol: str) -> dict:
@@ -173,18 +183,24 @@ def calculate_yoy_growth(quarterly_data, metric_name):
 
         # Find the row with the specified metric
         metric_rows = [idx for idx in quarterly_data.index if metric_name.lower() in str(idx).lower()]
-        metric_data = quarterly_data.loc[metric_rows[0]]
-
-        # Get most recent quarter vs same quarter last year (4 quarters ago)
-        current_q = metric_data.iloc[0]  # Most recent quarter
-        year_ago_q = metric_data.iloc[3] if len(metric_data) >= 4 else None
-
-        if (year_ago_q is None or year_ago_q == 0 or
-                pd.isna(current_q) or pd.isna(year_ago_q)):
+        metric_data = quarterly_data.loc[metric_rows[0]].dropna()
+        if metric_data.empty:
             return None
 
-        growth_rate = (current_q - year_ago_q) / abs(year_ago_q)
-        return growth_rate
+        # Match the year-ago quarter by date, not position: Yahoo often
+        # returns a leading or trailing all-NaN quarter column.
+        latest_date = metric_data.index.max()
+        current_q = metric_data[latest_date]
+        target = latest_date - pd.Timedelta(days=365)
+        distances = (metric_data.index - target).to_series(index=metric_data.index).abs()
+        distances = distances[distances <= pd.Timedelta(days=45)]
+        if distances.empty:
+            return None
+        year_ago_q = metric_data[distances.idxmin()]
+
+        if year_ago_q == 0:
+            return None
+        return (current_q - year_ago_q) / abs(year_ago_q)
 
     except Exception as e:
         LOGGER.warning("Error calculating YoY growth for %s: %s", metric_name, e)
@@ -209,33 +225,27 @@ def calculate_roe_growth(quarterly_financials, quarterly_balance_sheet):
         if not equity_rows:
             return None
 
-        income_data = quarterly_financials.loc[income_rows[0]]
-        equity_data = quarterly_balance_sheet.loc[equity_rows[0]]
+        income_data = quarterly_financials.loc[income_rows[0]].dropna().sort_index(ascending=False)
+        equity_data = quarterly_balance_sheet.loc[equity_rows[0]].dropna().sort_index(ascending=False)
 
-        # Calculate ROE for recent quarter and year-ago quarter using TTM approach
-        if len(income_data) >= 4 and len(equity_data) >= 4:
-            # Current TTM (Trailing Twelve Months) ROE
-            current_ttm_income = income_data.iloc[0:4].sum()  # Sum of last 4 quarters
-            current_equity = equity_data.iloc[0]  # Most recent equity
+        # Position 0 is the latest quarter, so the year-ago quarter is
+        # position 4 and the year-ago TTM window is positions 4-7.
+        if len(income_data) < 5 or len(equity_data) < 5:
+            return None
 
-            # Year-ago TTM ROE (if we have enough data)
-            if len(income_data) >= 7 and len(equity_data) >= 4:
-                year_ago_ttm_income = income_data.iloc[3:7].sum()  # Sum of quarters 4-7
-                year_ago_equity = equity_data.iloc[3]  # Equity 4 quarters ago
-            else:
-                # Fallback: annualize the year-ago quarter
-                year_ago_ttm_income = income_data.iloc[3] * 4
-                year_ago_equity = equity_data.iloc[3]
+        current_ttm_income = income_data.iloc[0:4].sum()
+        current_equity = equity_data.iloc[0]
+        year_ago_equity = equity_data.iloc[4]
+        if len(income_data) >= 8:
+            year_ago_ttm_income = income_data.iloc[4:8].sum()
+        else:
+            year_ago_ttm_income = income_data.iloc[4] * 4
 
-            if (current_equity > 0 and year_ago_equity > 0 and
-                    not pd.isna(current_ttm_income) and not pd.isna(year_ago_ttm_income)):
-
-                current_roe = current_ttm_income / current_equity
-                year_ago_roe = year_ago_ttm_income / year_ago_equity
-
-                if year_ago_roe != 0:
-                    roe_growth = (current_roe - year_ago_roe) / abs(year_ago_roe)
-                    return roe_growth
+        if current_equity > 0 and year_ago_equity > 0:
+            current_roe = current_ttm_income / current_equity
+            year_ago_roe = year_ago_ttm_income / year_ago_equity
+            if year_ago_roe != 0:
+                return (current_roe - year_ago_roe) / abs(year_ago_roe)
 
         return None
 
@@ -284,19 +294,44 @@ def parse_earnings_calendar(calendar, today=None):
     }
 
 
+def fetch_splits(provider, symbol):
+    """Split history, or [] when the provider can't supply it."""
+    try:
+        return provider.get_splits(symbol)
+    except Exception as error:
+        LOGGER.info("Split history unavailable for %s (%s); share counts left unadjusted",
+                    symbol, error)
+        return []
+
+
 class YahooFinanceProvider:
     """DataProvider backed by Yahoo Finance via yfinance."""
 
     name = 'yahoo'
 
     def get_price_history(self, symbol, days=300):
-        data = yf.download(symbol, period=f'{days}d', interval='1d', auto_adjust=True)
+        data = yf.download(symbol, period=f'{days}d', interval='1d', auto_adjust=False)
         # yf.download returns MultiIndex columns like ('Close', 'SPY') even
         # for a single symbol; flatten to match the documented flat
         # Open/High/Low/Close/Volume contract every caller relies on.
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = data.columns.droplevel(1)
+        if 'Adj Close' in data.columns:
+            # Reproduce auto_adjust=True (dividend-adjust OHLC by the same
+            # ratio) so returns and indicators are unchanged, but keep the
+            # split-only close: dividend adjustment shrinks older prices,
+            # which would understate historical market caps in backtests.
+            ratio = data['Adj Close'] / data['Close']
+            data['Split Close'] = data['Close']
+            for column in ('Open', 'High', 'Low'):
+                data[column] = data[column] * ratio
+            data['Close'] = data['Adj Close']
+            data = data.drop(columns='Adj Close')
         return data.dropna()
+
+    def get_splits(self, symbol):
+        splits = yf.Ticker(symbol).splits
+        return [(timestamp.date(), float(ratio)) for timestamp, ratio in splits.items() if ratio]
 
     def get_fundamentals(self, symbol):
         ticker = yf.Ticker(symbol)
@@ -462,6 +497,9 @@ class FallbackProvider:
     def get_fundamentals(self, symbol):
         return self._call('get_fundamentals', symbol)
 
+    def get_splits(self, symbol):
+        return self._call('get_splits', symbol)
+
     def get_benchmark_metrics(self, symbol):
         return self._call('get_benchmark_metrics', symbol)
 
@@ -493,6 +531,9 @@ class CompositeProvider:
     def get_price_history(self, symbol, days=300):
         return self.market.get_price_history(symbol, days=days)
 
+    def get_splits(self, symbol):
+        return self.market.get_splits(symbol)
+
     def lookup_symbol(self, symbol):
         return self.market.lookup_symbol(symbol)
 
@@ -515,7 +556,8 @@ class CompositeProvider:
 
         try:
             validated = self.edgar.get_fundamentals(
-                symbol, current_price=base.get('current_price'))
+                symbol, current_price=base.get('current_price'),
+                splits=fetch_splits(self.market, symbol))
         except Exception as error:
             LOGGER.info("EDGAR fundamentals unavailable for %s (%s); using %s data",
                         symbol, error, self.market.name)
