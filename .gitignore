@@ -7,4 +7,5 @@ venv/
 .venv/
 cache/
 .pytest_cache/
+reports/
 .env
